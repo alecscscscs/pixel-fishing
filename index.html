@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <title>Pixel Fishing EU</title>
 
-<!-- PWA / iPhone app-like -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b1320">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,7 +13,7 @@
 
 <style>
   body{margin:0;background:#0b1320;color:#eaf2ff;font-family:monospace;display:flex;justify-content:center}
-  .wrap{width:min(440px,96vw);padding:10px}
+  .wrap{width:min(460px,96vw);padding:10px}
   canvas{width:100%;height:auto;background:#08101a;border:1px solid #223;border-radius:12px;display:block;touch-action:none}
   .hud{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:6px 0 8px}
   .pill{background:#111a28;border:1px solid #233;padding:6px 10px;border-radius:999px;font-size:12px}
@@ -25,13 +24,12 @@
   .log{margin-top:8px;min-height:68px;opacity:.95;font-size:13px}
   .hint{opacity:.75;font-size:12px;margin-top:6px;text-align:center}
 
-  /* Panels */
   .panel{
     display:none; position:fixed; left:0; top:0; right:0; bottom:0;
     background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:14px;
   }
   .card{
-    width:min(460px, 96vw); max-height:80vh; overflow:auto;
+    width:min(520px, 96vw); max-height:80vh; overflow:auto;
     background:#0f1b2a; border:1px solid #2a3a55; border-radius:14px; padding:12px;
   }
   .card h3{margin:0 0 8px 0}
@@ -40,11 +38,18 @@
   .item{background:#0c1624;border:1px solid #22344e;border-radius:12px;padding:10px;font-size:13px}
   .item b{font-size:14px}
   .small{opacity:.85;font-size:12px}
-  .bar{
-    height:10px; background:#16263c; border:1px solid #2a3a55; border-radius:999px; overflow:hidden;
-  }
+  .bar{ height:10px; background:#16263c; border:1px solid #2a3a55; border-radius:999px; overflow:hidden; }
   .bar > div{height:100%; width:0%;}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3a55;margin-left:6px;font-size:12px;opacity:.9}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .ctrl{background:#0c1624;border:1px solid #22344e;border-radius:12px;padding:10px}
+  input[type="range"]{width:100%}
+  select{width:100%;padding:8px;border-radius:10px;background:#0c1624;color:#eaf2ff;border:1px solid #22344e}
+  
+  /* New style for fight controls */
+  .fight-controls{display:none; margin-top:8px;}
+  .casting-target{position:absolute;width:12px;height:12px;background:#ffcc33;border-radius:50%;border:2px solid #fff;pointer-events:none;display:none;}
 </style>
 </head>
 
@@ -56,21 +61,85 @@
     <div class="pill">🎒 Keepnet: <b id="netKg">0.00</b>/<b id="netCap">15.00</b> kg</div>
   </div>
 
-  <canvas id="c" width="440" height="270"></canvas>
+  <canvas id="c" width="460" height="290"></canvas>
+  
+  <!-- Casting target indicator -->
+  <div class="casting-target" id="castingTarget"></div>
 
   <div class="row">
     <button id="castBtn">🎯 Cast</button>
     <button id="reelBtn">🧲 Reel / Hook</button>
   </div>
+  
+  <!-- Fight controls -->
+  <div class="row fight-controls" id="fightControls">
+    <button id="cutLineBtn">✂️ Cut line (release fish)</button>
+  </div>
+  
   <div class="row">
+    <button id="setupBtn">🧰 Setup</button>
     <button id="invBtn">🎒 Inventory</button>
+    <button id="logBtn">📘 Logbook</button>
     <button id="shopBtn">🛒 Shop</button>
     <button id="dayBtn">🌙 Night</button>
   </div>
 
   <div class="log" id="log"></div>
   <div class="hint">
-    Tap canvas: 1 tap = Cast · Double tap = Reel/Hook · During Fight: hold the Reel button (watch tension).
+    Tap anywhere on canvas to cast there. Double tap = Reel/Hook · During Fight: hold Reel + manage DRAG.
+  </div>
+</div>
+
+<!-- Setup Panel -->
+<div class="panel" id="setupPanel">
+  <div class="card">
+    <button class="x" id="setupClose">Close</button>
+    <h3>🧰 Rod setup & rig</h3>
+    <div class="small">Choose your full rig here: rod + reel + line + float + hook + bait + depth. During fight, use DRAG to avoid snapping or escape.</div>
+
+    <div class="item" style="margin-top:10px">
+      <b>Current setup</b>
+      <div class="small" id="setupSummary"></div>
+    </div>
+
+    <div class="grid2" style="margin-top:10px">
+      <div class="ctrl">
+        <div class="small">Float depth: <b id="depthTxt">2.0</b> m</div>
+        <input id="depthSlider" type="range" min="0.5" max="8.0" step="0.1">
+        <div class="small">Deeper = more depth species & different fight behavior.</div>
+      </div>
+
+      <div class="ctrl">
+        <div class="small">Default DRAG: <b id="dragTxt">0.55</b></div>
+        <input id="dragSlider" type="range" min="0.15" max="0.95" step="0.01">
+        <div class="small">Low = slips (less snap) · High = more control (more snap).</div>
+      </div>
+
+      <div class="ctrl">
+        <div class="small">Hook</div>
+        <select id="hookSelect"></select>
+      </div>
+
+      <div class="ctrl">
+        <div class="small">Float</div>
+        <select id="floatSelect"></select>
+      </div>
+
+      <div class="ctrl">
+        <div class="small">Reel</div>
+        <select id="reelSelect"></select>
+      </div>
+
+      <div class="ctrl">
+        <div class="small">Bait</div>
+        <select id="baitSelect"></select>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="applySetupBtn">✅ Apply</button>
+      <button id="resetSaveBtn">🧨 Reset Save</button>
+    </div>
   </div>
 </div>
 
@@ -79,7 +148,7 @@
   <div class="card">
     <button class="x" id="invClose">Close</button>
     <h3>🎒 Keepnet (stored fish)</h3>
-    <div class="small">You can sell anytime. If the keepnet is full, upgrade it in the Shop.</div>
+    <div class="small">You can sell anytime. If keepnet is full, upgrade it in the Shop.</div>
 
     <div style="margin:10px 0">
       <div class="bar"><div id="netBar"></div></div>
@@ -95,12 +164,29 @@
   </div>
 </div>
 
+<!-- Logbook Panel -->
+<div class="panel" id="logPanel">
+  <div class="card">
+    <button class="x" id="logClose">Close</button>
+    <h3>📘 Logbook</h3>
+    <div class="item">
+      <b>Overall</b>
+      <div class="small" id="logSummary"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="resetLogBtn">🧽 Reset logbook</button>
+        <button id="copyLogBtn">📋 Copy log JSON</button>
+      </div>
+    </div>
+    <div class="list" id="logList" style="margin-top:10px"></div>
+  </div>
+</div>
+
 <!-- Shop Panel -->
 <div class="panel" id="shopPanel">
   <div class="card">
     <button class="x" id="shopClose">Close</button>
     <h3>🛒 Shop</h3>
-    <div class="small">Gear affects bite speed, big fish chance, and line snapping. Upgrade keepnet to store larger hauls.</div>
+    <div class="small">Buy gear: rods, reels, lines, floats, hooks, baits. Better gear lets you fight bigger fish.</div>
 
     <div class="item" style="margin-top:10px">
       <b>Equipped</b>
@@ -113,8 +199,17 @@
     <h3 style="margin-top:12px">🎣 Rods</h3>
     <div class="list" id="rodList"></div>
 
+    <h3 style="margin-top:12px">🌀 Reels</h3>
+    <div class="list" id="reelList"></div>
+
     <h3 style="margin-top:12px">🧵 Lines</h3>
     <div class="list" id="lineList"></div>
+
+    <h3 style="margin-top:12px">🎈 Floats</h3>
+    <div class="list" id="floatList"></div>
+
+    <h3 style="margin-top:12px">🪝 Hooks</h3>
+    <div class="list" id="hookList"></div>
 
     <h3 style="margin-top:12px">🪱 Baits</h3>
     <div class="list" id="baitList"></div>
@@ -123,8 +218,10 @@
 
 <script>
 (() => {
+  // ---------- DOM ----------
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
+  const castingTarget = document.getElementById("castingTarget");
 
   const moneyEl = document.getElementById("money");
   const stateEl = document.getElementById("state");
@@ -134,9 +231,27 @@
 
   const castBtn = document.getElementById("castBtn");
   const reelBtn = document.getElementById("reelBtn");
+  const setupBtn = document.getElementById("setupBtn");
   const invBtn = document.getElementById("invBtn");
+  const logBtn = document.getElementById("logBtn");
   const shopBtn = document.getElementById("shopBtn");
   const dayBtn = document.getElementById("dayBtn");
+  const cutLineBtn = document.getElementById("cutLineBtn");
+  const fightControls = document.getElementById("fightControls");
+
+  const setupPanel = document.getElementById("setupPanel");
+  const setupClose = document.getElementById("setupClose");
+  const setupSummary = document.getElementById("setupSummary");
+  const depthSlider = document.getElementById("depthSlider");
+  const depthTxt = document.getElementById("depthTxt");
+  const dragSlider = document.getElementById("dragSlider");
+  const dragTxt = document.getElementById("dragTxt");
+  const hookSelect = document.getElementById("hookSelect");
+  const floatSelect = document.getElementById("floatSelect");
+  const reelSelect = document.getElementById("reelSelect");
+  const baitSelect = document.getElementById("baitSelect");
+  const applySetupBtn = document.getElementById("applySetupBtn");
+  const resetSaveBtn = document.getElementById("resetSaveBtn");
 
   const invPanel = document.getElementById("invPanel");
   const invClose = document.getElementById("invClose");
@@ -147,22 +262,34 @@
   const netTotalTxt = document.getElementById("netTotalTxt");
   const netCapTxt = document.getElementById("netCapTxt");
 
+  const logPanel = document.getElementById("logPanel");
+  const logClose = document.getElementById("logClose");
+  const logSummary = document.getElementById("logSummary");
+  const logList = document.getElementById("logList");
+  const resetLogBtn = document.getElementById("resetLogBtn");
+  const copyLogBtn = document.getElementById("copyLogBtn");
+
   const shopPanel = document.getElementById("shopPanel");
   const shopClose = document.getElementById("shopClose");
   const equippedTxt = document.getElementById("equippedTxt");
   const rodList = document.getElementById("rodList");
+  const reelList = document.getElementById("reelList");
   const lineList = document.getElementById("lineList");
+  const floatList = document.getElementById("floatList");
+  const hookList = document.getElementById("hookList");
   const baitList = document.getElementById("baitList");
   const netUpgradeList = document.getElementById("netUpgradeList");
 
   // ---------- Helpers ----------
   const W = canvas.width, H = canvas.height;
-  const shoreY = 92;
+  const shoreY = 100;
   const waterY = shoreY + 10;
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const clamp01 = (v) => clamp(v, 0, 1);
   const fmt2 = (x) => Number(x).toFixed(2);
   const rand = (min, max) => min + Math.random()*(max-min);
+  const lerp = (a, b, t) => a + (b - a) * t;
 
   const rarColor = (rar) => ({
     "common":"#eaf2ff",
@@ -174,28 +301,28 @@
 
   function log(html){ logEl.innerHTML = html; }
 
-  function setState(s){
-    state = s;
-    stateEl.textContent = ({
-      ready:"ready",
-      casting:"casting...",
-      waiting:"waiting...",
-      bite:"BITE!",
-      fight:"FIGHT!",
-      miss:"missed",
-      snapped:"line snapped"
-    }[s] || s);
+  // ---------- Save / Load ----------
+  const SAVE_KEY = "pf_save_v3";
+  function saveJSON(k, obj){ localStorage.setItem(k, JSON.stringify(obj)); }
+  function loadJSON(k, dflt){
+    const raw = localStorage.getItem(k);
+    if(!raw) return dflt;
+    try { return JSON.parse(raw); } catch { return dflt; }
   }
 
-  // ---------- Save helpers ----------
-  function loadNum(k, d){ return Number(localStorage.getItem(k) ?? d); }
-  function saveNum(k, v){ localStorage.setItem(k, String(v)); }
+  // ---------- Economy / keepnet ----------
+  let money = 0;
+  let keepnet = [];
+  let keepnetCapKg = 15.0;
 
-  // ---------- Economy / inventory ----------
-  let money = loadNum("pf_money", 0);
+  // Logbook (records)
+  let logbook = {
+    totalCaught: 0,
+    totalKgCaught: 0,
+    species: {}
+  };
 
-  const keepnet = []; // {name, rarity, kg, value, trophy}
-  let keepnetCapKg = loadNum("pf_netcap", 15.0);
+  const rarityRank = { common:1, uncommon:2, rare:3, epic:4, legendary:5 };
 
   function keepnetTotalKg(){
     return keepnet.reduce((s,f)=>s+f.kg,0);
@@ -218,14 +345,429 @@
   function addToKeepnet(fish){
     const total = keepnetTotalKg();
     if(total + fish.kg > keepnetCapKg + 1e-9){
-      log(`🎒 Keepnet full! You hooked <b style="color:${rarColor(fish.rarity)}">${fish.name}</b> (${fmt2(fish.kg)} kg) but it <b>doesn't fit</b>.<br>
-           Upgrade your keepnet in the Shop or release something in Inventory.`);
+      log(`🎒 Keepnet full! You landed <b style="color:${rarColor(fish.rarity)}">${fish.name}</b> (${fmt2(fish.kg)} kg) but it <b>doesn't fit</b>.<br>
+           Upgrade your keepnet in Shop or release some fish.`);
       return false;
     }
     keepnet.push(fish);
+    saveAll();
     return true;
   }
 
+  // ---------- IMPROVED Fish sprites ----------
+  const spriteCache = new Map();
+
+  function drawFishBody(g, bodyPoints, colorTop, colorBottom) {
+    for(let i = 0; i < bodyPoints.length; i++) {
+      const row = bodyPoints[i];
+      for(let j = 0; j < row.length; j++) {
+        if(row[j] !== 0) {
+          g.fillStyle = row[j] === 1 ? colorTop : colorBottom;
+          g.fillRect(j, i, 1, 1);
+        }
+      }
+    }
+  }
+
+  function drawCrucianCarp(g) {
+    const body = [
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,1,1,1,1,1,1,0,0,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,1,2,2,2,2,2,2,2,2,1,0],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,2,2,2,2,2,2,2,2,1,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,1,1,1,1,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#e0b060", "#c89540");
+    
+    // Tail
+    g.fillStyle = "#e0b060";
+    g.fillRect(0, 5, 3, 2);
+    g.fillRect(0, 4, 2, 4);
+    
+    // Dorsal fin
+    g.fillStyle = "#b08030";
+    g.fillRect(6, 1, 1, 3);
+    g.fillRect(7, 2, 1, 2);
+    
+    // Anal fin
+    g.fillStyle = "#b08030";
+    g.fillRect(6, 9, 1, 3);
+    g.fillRect(7, 10, 1, 2);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawBream(g) {
+    const body = [
+      [0,0,0,0,0,1,1,0,0,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,0,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#a0c0d0", "#708090");
+    
+    // Tail
+    g.fillStyle = "#a0c0d0";
+    g.fillRect(0, 5, 3, 2);
+    
+    // Dorsal fin
+    g.fillStyle = "#607080";
+    g.fillRect(5, 1, 2, 4);
+    g.fillRect(6, 2, 1, 3);
+    
+    // Anal fin
+    g.fillStyle = "#607080";
+    g.fillRect(5, 8, 2, 4);
+    g.fillRect(6, 9, 1, 3);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawCommonCarp(g) {
+    const body = [
+      [0,0,0,0,0,1,1,0,0,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#d0a850", "#b08030");
+    
+    // Tail
+    g.fillStyle = "#d0a850";
+    g.fillRect(0, 4, 4, 4);
+    
+    // Dorsal fin (large)
+    g.fillStyle = "#a07020";
+    for(let i = 2; i < 6; i++) {
+      g.fillRect(5, i, 2, 1);
+    }
+    g.fillRect(6, 3, 1, 3);
+    
+    // Anal fin
+    g.fillStyle = "#a07020";
+    for(let i = 7; i < 10; i++) {
+      g.fillRect(5, i, 2, 1);
+    }
+    g.fillRect(6, 8, 1, 2);
+    
+    // Whiskers (barbels)
+    g.fillStyle = "#b08030";
+    g.fillRect(10, 6, 3, 1);
+    g.fillRect(10, 7, 3, 1);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawTrout(g) {
+    const body = [
+      [0,0,0,0,0,1,1,0,0,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,0,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#80a090", "#507060");
+    
+    // Spots
+    g.fillStyle = "#ff6b6b";
+    g.fillRect(4, 4, 1, 1);
+    g.fillRect(7, 3, 1, 1);
+    g.fillRect(5, 7, 1, 1);
+    g.fillRect(8, 8, 1, 1);
+    
+    // Tail (forked)
+    g.fillStyle = "#80a090";
+    g.fillRect(0, 4, 2, 1);
+    g.fillRect(0, 5, 3, 2);
+    g.fillRect(0, 7, 2, 1);
+    
+    // Dorsal fin
+    g.fillStyle = "#405040";
+    g.fillRect(5, 1, 2, 3);
+    
+    // Adipose fin (trout characteristic)
+    g.fillStyle = "#405040";
+    g.fillRect(8, 4, 1, 2);
+    
+    // Anal fin
+    g.fillStyle = "#405040";
+    g.fillRect(5, 8, 2, 3);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawPike(g) {
+    const body = [
+      [0,0,0,0,0,0,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,1,1,0,0,0],
+      [0,0,0,0,1,1,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [0,0,1,1,2,2,2,2,2,2,1,1],
+      [0,0,0,1,1,2,2,2,2,1,1,0],
+      [0,0,0,0,1,1,2,2,1,1,0,0],
+      [0,0,0,0,0,1,1,1,1,0,0,0],
+      [0,0,0,0,0,0,1,1,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#90c070", "#608040");
+    
+    // Long head/mouth
+    g.fillStyle = "#90c070";
+    g.fillRect(10, 5, 4, 2);
+    g.fillRect(11, 4, 3, 4);
+    
+    // Teeth
+    g.fillStyle = "#ffffff";
+    g.fillRect(12, 5, 1, 2);
+    g.fillRect(13, 5, 1, 2);
+    
+    // Dorsal fin (far back)
+    g.fillStyle = "#507030";
+    g.fillRect(3, 3, 1, 6);
+    g.fillRect(4, 4, 1, 4);
+    
+    // Tail (large)
+    g.fillStyle = "#90c070";
+    g.fillRect(0, 4, 2, 4);
+    g.fillRect(1, 3, 1, 6);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawCatfish(g) {
+    const body = [
+      [0,0,0,0,0,0,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,1,1,0,0,0],
+      [0,0,0,0,1,1,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [1,1,2,2,2,2,2,2,2,2,2,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,1,1,1,1,0,0,0]
+    ];
+    drawFishBody(g, body, "#a0a8b0", "#707880");
+    
+    // Wide flat head
+    g.fillStyle = "#a0a8b0";
+    g.fillRect(10, 3, 3, 6);
+    
+    // Whiskers (long)
+    g.fillStyle = "#707880";
+    g.fillRect(12, 5, 4, 1);
+    g.fillRect(12, 6, 4, 1);
+    g.fillRect(12, 7, 4, 1);
+    
+    // Dorsal fin (small)
+    g.fillStyle = "#505860";
+    g.fillRect(5, 2, 2, 3);
+    
+    // Adipose fin
+    g.fillStyle = "#505860";
+    g.fillRect(8, 8, 1, 2);
+    
+    // Tail (forked)
+    g.fillStyle = "#a0a8b0";
+    g.fillRect(0, 4, 2, 1);
+    g.fillRect(0, 5, 3, 2);
+    g.fillRect(0, 7, 2, 1);
+    
+    // Eye (small)
+    g.fillStyle = "#ffffff";
+    g.fillRect(10, 5, 1, 1);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 5, 1, 1);
+  }
+
+  function drawZander(g) {
+    const body = [
+      [0,0,0,0,0,0,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,1,1,0,0,0],
+      [0,0,0,0,1,1,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [0,1,1,2,2,2,2,2,2,2,2,1],
+      [0,0,1,1,2,2,2,2,2,2,1,1],
+      [0,0,0,1,1,2,2,2,2,1,1,0],
+      [0,0,0,0,1,1,2,2,1,1,0,0],
+      [0,0,0,0,0,1,1,1,1,0,0,0],
+      [0,0,0,0,0,0,1,1,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#b0b8c0", "#808890");
+    
+    // Pointed head
+    g.fillStyle = "#b0b8c0";
+    g.fillRect(10, 5, 3, 2);
+    g.fillRect(11, 4, 2, 4);
+    
+    // Dorsal fins (spiny and soft)
+    g.fillStyle = "#606870";
+    // First dorsal
+    for(let i = 2; i < 5; i++) {
+      g.fillRect(4, i, 1, 1);
+    }
+    // Second dorsal
+    for(let i = 7; i < 9; i++) {
+      g.fillRect(7, i, 1, 1);
+    }
+    
+    // Tail (slightly forked)
+    g.fillStyle = "#b0b8c0";
+    g.fillRect(0, 4, 2, 1);
+    g.fillRect(0, 5, 3, 2);
+    g.fillRect(0, 7, 2, 1);
+    
+    // Eye (large)
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+  }
+
+  function drawChub(g) {
+    const body = [
+      [0,0,0,0,0,1,1,0,0,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [1,1,2,2,2,2,2,2,2,2,1,1],
+      [0,1,1,2,2,2,2,2,2,1,1,0],
+      [0,0,1,1,2,2,2,2,1,1,0,0],
+      [0,0,0,1,1,2,2,1,1,0,0,0],
+      [0,0,0,0,1,1,1,1,0,0,0,0],
+      [0,0,0,0,0,1,1,0,0,0,0,0]
+    ];
+    drawFishBody(g, body, "#c0b090", "#907860");
+    
+    // Tail
+    g.fillStyle = "#c0b090";
+    g.fillRect(0, 5, 3, 2);
+    
+    // Dorsal fin
+    g.fillStyle = "#806050";
+    g.fillRect(5, 2, 2, 3);
+    
+    // Anal fin
+    g.fillStyle = "#806050";
+    g.fillRect(5, 8, 2, 3);
+    
+    // Eye
+    g.fillStyle = "#ffffff";
+    g.fillRect(9, 5, 2, 2);
+    g.fillStyle = "#000000";
+    g.fillRect(10, 6, 1, 1);
+    
+    // Dark lateral line
+    g.fillStyle = "#604830";
+    for(let i = 4; i < 9; i++) {
+      g.fillRect(i, 6, 1, 1);
+    }
+  }
+
+  function getFishSpriteCanvas(name){
+    if(spriteCache.has(name)) return spriteCache.get(name);
+    
+    const c = document.createElement("canvas");
+    c.width = 56;
+    c.height = 26;
+    const g = c.getContext("2d");
+    
+    // Scale up the sprite for better detail
+    g.scale(2, 2);
+    
+    // Draw the fish based on species
+    switch(name) {
+      case "Crucian Carp":
+        drawCrucianCarp(g);
+        break;
+      case "Bream":
+        drawBream(g);
+        break;
+      case "Common Carp":
+        drawCommonCarp(g);
+        break;
+      case "Trout":
+        drawTrout(g);
+        break;
+      case "Pike":
+        drawPike(g);
+        break;
+      case "Catfish":
+        drawCatfish(g);
+        break;
+      case "Zander":
+        drawZander(g);
+        break;
+      case "Chub":
+        drawChub(g);
+        break;
+      default:
+        drawCrucianCarp(g);
+    }
+    
+    spriteCache.set(name, c);
+    return c;
+  }
+
+  // ---------- Inventory rendering ----------
   function renderInventory(){
     invList.innerHTML = "";
     if(keepnet.length === 0){
@@ -237,12 +779,18 @@
     keepnet.forEach((f, idx) => {
       const el = document.createElement("div");
       el.className = "item";
+
       el.innerHTML = `
-        <b style="color:${rarColor(f.rarity)}">${f.name}</b>
-        <span class="tag" style="color:${rarColor(f.rarity)}">${f.rarity}</span>
-        ${f.trophy ? `<span class="tag" style="color:#ffcc33">TROPHY</span>` : ``}
-        <br>
-        ⚖️ <b>${fmt2(f.kg)}</b> kg · 💰 <b>${f.value}</b> coins
+        <div style="display:flex;gap:10px;align-items:center">
+          <canvas width="48" height="22" data-sprite="${idx}" style="image-rendering:pixelated;border:1px solid #22344e;border-radius:8px;background:#07101a"></canvas>
+          <div style="flex:1">
+            <b style="color:${rarColor(f.rarity)}">${f.name}</b>
+            <span class="tag" style="color:${rarColor(f.rarity)}">${f.rarity}</span>
+            ${f.trophy ? `<span class="tag" style="color:#ffcc33">TROPHY</span>` : ``}
+            <div class="small">⚖️ <b>${fmt2(f.kg)}</b> kg · 💰 <b>${f.value}</b> coins</div>
+          </div>
+        </div>
+
         <div class="row" style="margin-top:8px">
           <button data-sell="${idx}">Sell</button>
           <button data-rel="${idx}">Release</button>
@@ -251,13 +799,24 @@
       invList.appendChild(el);
     });
 
+    // draw sprites
+    invList.querySelectorAll("canvas[data-sprite]").forEach(c=>{
+      const i = Number(c.getAttribute("data-sprite"));
+      const fish = keepnet[i];
+      const g = c.getContext("2d");
+      const spr = getFishSpriteCanvas(fish.name);
+      g.imageSmoothingEnabled = false;
+      g.clearRect(0,0,c.width,c.height);
+      g.drawImage(spr, 0, 0, 48, 22);
+    });
+
     invList.querySelectorAll("button[data-sell]").forEach(btn=>{
       btn.addEventListener("click", () => {
         const i = Number(btn.getAttribute("data-sell"));
         const f = keepnet[i];
         money += f.value;
         keepnet.splice(i,1);
-        saveNum("pf_money", money);
+        saveAll();
         renderInventory();
         updateHud();
       });
@@ -267,6 +826,7 @@
       btn.addEventListener("click", () => {
         const i = Number(btn.getAttribute("data-rel"));
         keepnet.splice(i,1);
+        saveAll();
         renderInventory();
         updateHud();
       });
@@ -275,11 +835,73 @@
     updateHud();
   }
 
+  // ---------- Logbook ----------
+  function logbookUpdate(f){
+    logbook.totalCaught += 1;
+    logbook.totalKgCaught += f.kg;
+
+    if(!logbook.species[f.name]){
+      logbook.species[f.name] = { count:0, biggestKg:0, bestRarity:"common", trophies:0 };
+    }
+    const s = logbook.species[f.name];
+    s.count += 1;
+    if(f.kg > s.biggestKg) s.biggestKg = f.kg;
+    if(rarityRank[f.rarity] > rarityRank[s.bestRarity]) s.bestRarity = f.rarity;
+    if(f.trophy) s.trophies += 1;
+
+    saveAll();
+  }
+
+  function renderLogbook(){
+    const entries = Object.entries(logbook.species)
+      .map(([name, s]) => ({ name, ...s }))
+      .sort((a,b)=> (b.biggestKg - a.biggestKg));
+
+    logSummary.innerHTML = `
+      Total fish caught: <b>${logbook.totalCaught}</b><br>
+      Total kg caught: <b>${fmt2(logbook.totalKgCaught)}</b> kg<br>
+      Species discovered: <b>${entries.length}</b>
+    `;
+
+    logList.innerHTML = "";
+    if(entries.length === 0){
+      logList.innerHTML = `<div class="item">No records yet. Go fishing!</div>`;
+      return;
+    }
+
+    for(const e of entries){
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center">
+          <canvas width="56" height="26" data-log-spr="${e.name}" style="image-rendering:pixelated;border:1px solid #22344e;border-radius:8px;background:#07101a"></canvas>
+          <div style="flex:1">
+            <b>${e.name}</b>
+            <span class="tag" style="color:${rarColor(e.bestRarity)}">${e.bestRarity}</span>
+            ${e.trophies ? `<span class="tag" style="color:#ffcc33">Trophies: ${e.trophies}</span>` : ``}
+            <div class="small">Caught: <b>${e.count}</b> · Biggest: <b>${fmt2(e.biggestKg)}</b> kg</div>
+          </div>
+        </div>
+      `;
+      logList.appendChild(el);
+    }
+
+    logList.querySelectorAll("canvas[data-log-spr]").forEach(cv=>{
+      const name = cv.getAttribute("data-log-spr");
+      const g = cv.getContext("2d");
+      const spr = getFishSpriteCanvas(name);
+      g.imageSmoothingEnabled = false;
+      g.clearRect(0,0,cv.width,cv.height);
+      g.drawImage(spr, 0, 0, cv.width, cv.height);
+    });
+  }
+
+  // Sell all / release all
   sellAllBtn.addEventListener("click", () => {
     const sum = keepnet.reduce((s,f)=>s+f.value,0);
     money += sum;
     keepnet.length = 0;
-    saveNum("pf_money", money);
+    saveAll();
     renderInventory();
     updateHud();
     log(`💸 Sold everything in keepnet: +<b>${sum}</b> coins.`);
@@ -287,30 +909,49 @@
 
   releaseAllBtn.addEventListener("click", () => {
     keepnet.length = 0;
+    saveAll();
     renderInventory();
     updateHud();
     log(`🫧 Released all fish.`);
   });
 
-  // ---------- Equipment / shop ----------
+  // ---------- Shop / gear ----------
   const rods = [
-    {id:"rod_basic", name:"Starter Rod",    price:0,   biteBonus:0.00, bigBonus:0.00},
-    {id:"rod_lake",  name:"Lake Rod",       price:250, biteBonus:0.08, bigBonus:0.06},
-    {id:"rod_pro",   name:"Pro Rod",        price:800, biteBonus:0.15, bigBonus:0.12},
+    {id:"rod_basic", name:"Starter Rod", price:0, biteBonus:0.00, bigBonus:0.00, rodMaxKg:6},
+    {id:"rod_lake",  name:"Lake Rod",    price:250, biteBonus:0.08, bigBonus:0.06, rodMaxKg:10},
+    {id:"rod_pro",   name:"Pro Rod",     price:800, biteBonus:0.15, bigBonus:0.12, rodMaxKg:16},
   ];
+
+  const reels = [
+    {id:"reel_basic", name:"Basic Reel", price:0,   reelPower:1.10, dragQuality:0.75},
+    {id:"reel_smooth",name:"Smooth Reel",price:260, reelPower:1.25, dragQuality:0.90},
+    {id:"reel_pro",   name:"Pro Reel",   price:720, reelPower:1.40, dragQuality:1.05},
+  ];
+
   const lines = [
     {id:"line_4",  name:"Line 4 kg",  price:0,   strengthKg:4},
     {id:"line_10", name:"Line 10 kg", price:220, strengthKg:10},
     {id:"line_20", name:"Line 20 kg", price:650, strengthKg:20},
   ];
+
+  const floats = [
+    {id:"float_basic", name:"Basic Float", price:0,   biteBonus:0.00, stability:0.85},
+    {id:"float_slim",  name:"Slim Float",  price:120, biteBonus:0.05, stability:0.92},
+    {id:"float_pro",   name:"Pro Float",   price:360, biteBonus:0.10, stability:1.05},
+  ];
+
+  const hooks = [
+    {id:"hook_12", name:"Hook #12 (small)", price:0,   hookSize:0.55},
+    {id:"hook_6",  name:"Hook #6 (medium)", price:140, hookSize:0.80},
+    {id:"hook_2",  name:"Hook #2 (large)",  price:420, hookSize:1.05},
+  ];
+
   const baits = [
     {id:"bait_worm",   name:"Worm",        price:0,   bias:"peaceful"},
     {id:"bait_corn",   name:"Corn",        price:60,  bias:"carp"},
     {id:"bait_minnow", name:"Live Minnow", price:140, bias:"predator"},
   ];
 
-  // Keepnet upgrades
-  // next capacity upgrades cost coins; saved by updating pf_netcap
   const keepnetUpgrades = [
     {cap: 15,  price: 0,    label:"15 kg (Starter)"},
     {cap: 25,  price: 220,  label:"25 kg"},
@@ -319,13 +960,24 @@
     {cap: 85,  price: 1400, label:"85 kg"},
   ];
 
-  let equippedRodId  = localStorage.getItem("pf_rod")  || "rod_basic";
-  let equippedLineId = localStorage.getItem("pf_line") || "line_4";
-  let equippedBaitId = localStorage.getItem("pf_bait") || "bait_worm";
-  let isNight = (localStorage.getItem("pf_night") === "1");
+  // Equipped
+  let equippedRodId  = "rod_basic";
+  let equippedReelId = "reel_basic";
+  let equippedLineId = "line_4";
+  let equippedFloatId= "float_basic";
+  let equippedHookId = "hook_12";
+  let equippedBaitId = "bait_worm";
+
+  // Rig params
+  let floatDepthM = 2.0;
+  let defaultDrag = 0.55;
+  let isNight = false;
 
   function getRod(){ return rods.find(r=>r.id===equippedRodId) || rods[0]; }
+  function getReel(){ return reels.find(r=>r.id===equippedReelId) || reels[0]; }
   function getLine(){ return lines.find(l=>l.id===equippedLineId) || lines[0]; }
+  function getFloat(){ return floats.find(f=>f.id===equippedFloatId) || floats[0]; }
+  function getHook(){ return hooks.find(h=>h.id===equippedHookId) || hooks[0]; }
   function getBait(){ return baits.find(b=>b.id===equippedBaitId) || baits[0]; }
 
   function ownedKey(id){ return "pf_owned_" + id; }
@@ -333,15 +985,9 @@
   function setOwned(id){ localStorage.setItem(ownedKey(id), "1"); }
 
   function priceOf(id){
-    const all = [...rods, ...lines, ...baits];
+    const all = [...rods, ...reels, ...lines, ...floats, ...hooks, ...baits];
     const it = all.find(x=>x.id===id);
     return it ? it.price : 0;
-  }
-
-  function equip(id){
-    if(id.startsWith("rod_"))  equippedRodId = id, localStorage.setItem("pf_rod", id);
-    if(id.startsWith("line_")) equippedLineId = id, localStorage.setItem("pf_line", id);
-    if(id.startsWith("bait_")) equippedBaitId = id, localStorage.setItem("pf_bait", id);
   }
 
   function buy(id){
@@ -352,43 +998,51 @@
       return false;
     }
     money -= p;
-    saveNum("pf_money", money);
     setOwned(id);
+    saveAll();
     return true;
+  }
+
+  function equip(id){
+    if(id.startsWith("rod_"))   equippedRodId = id;
+    if(id.startsWith("reel_"))  equippedReelId = id;
+    if(id.startsWith("line_"))  equippedLineId = id;
+    if(id.startsWith("float_")) equippedFloatId = id;
+    if(id.startsWith("hook_"))  equippedHookId = id;
+    if(id.startsWith("bait_"))  equippedBaitId = id;
+    saveAll();
   }
 
   function buyKeepnetUpgrade(newCap, price){
     if(newCap <= keepnetCapKg) return;
-
     if(money < price){
       log(`❌ Not enough coins for keepnet upgrade. You need <b>${price}</b>.`);
       return;
     }
     money -= price;
     keepnetCapKg = newCap;
-    saveNum("pf_money", money);
-    saveNum("pf_netcap", keepnetCapKg);
-
+    saveAll();
     updateHud();
     renderShop();
-    log(`✅ Keepnet upgraded to <b>${newCap} kg</b> capacity.`);
+    log(`✅ Keepnet upgraded to <b>${newCap} kg</b>.`);
   }
 
   function renderShop(){
-    const rod = getRod(), line = getLine(), bait = getBait();
-
+    const rod = getRod(), reel = getReel(), line = getLine(), fl = getFloat(), hk = getHook(), bait = getBait();
     equippedTxt.innerHTML = `
-      🎣 <b>${rod.name}</b> (bite +${Math.round(rod.biteBonus*100)}%, big fish +${Math.round(rod.bigBonus*100)}%)<br>
-      🧵 <b>${line.name}</b> (strength <b>${line.strengthKg} kg</b>)<br>
+      🎣 <b>${rod.name}</b> (max <b>${rod.rodMaxKg}kg</b>)<br>
+      🌀 <b>${reel.name}</b> (power <b>${reel.reelPower.toFixed(2)}</b>, drag quality <b>${reel.dragQuality.toFixed(2)}</b>)<br>
+      🧵 <b>${line.name}</b> (strength <b>${line.strengthKg}kg</b>)<br>
+      🎈 <b>${fl.name}</b> (stability <b>${fl.stability.toFixed(2)}</b>)<br>
+      🪝 <b>${hk.name}</b> (size <b>${hk.hookSize.toFixed(2)}</b>)<br>
       🪱 <b>${bait.name}</b><br>
-      🎒 Keepnet: <b>${fmt2(keepnetCapKg)} kg</b>
+      🎒 Keepnet: <b>${fmt2(keepnetCapKg)} kg</b> · Depth: <b>${floatDepthM.toFixed(1)}m</b> · Default drag: <b>${defaultDrag.toFixed(2)}</b>
     `;
 
-    // Keepnet upgrades
+    // keepnet
     const currentCap = keepnetCapKg;
     netUpgradeList.innerHTML = keepnetUpgrades.map(u => {
       const owned = (u.cap <= currentCap);
-      const canBuy = (!owned && u.cap > currentCap);
       const btnText = owned ? "Owned" : `Buy (${u.price} coins)`;
       return `
         <div class="item">
@@ -403,15 +1057,13 @@
 
     netUpgradeList.querySelectorAll("button[data-netcap]").forEach(btn=>{
       btn.addEventListener("click", () => {
-        const cap = Number(btn.getAttribute("data-netcap"));
-        const price = Number(btn.getAttribute("data-netprice"));
-        buyKeepnetUpgrade(cap, price);
+        buyKeepnetUpgrade(Number(btn.getAttribute("data-netcap")), Number(btn.getAttribute("data-netprice")));
       });
     });
 
-    function itemHtml(obj, extra){
+    function itemHtml(obj, extra, isEq){
       const owned = isOwned(obj.id);
-      const eq = (obj.id===equippedRodId || obj.id===equippedLineId || obj.id===equippedBaitId);
+      const eq = isEq(obj.id);
       const btnText = eq ? "Equipped" : (owned ? "Equip" : `Buy (${obj.price} coins)`);
       return `
         <div class="item">
@@ -424,26 +1076,34 @@
       `;
     }
 
-    rodList.innerHTML = rods.map(r => itemHtml(r, `Bite bonus: ${Math.round(r.biteBonus*100)}% · Big fish: ${Math.round(r.bigBonus*100)}%`)).join("");
-    lineList.innerHTML = lines.map(l => itemHtml(l, `Strength: <b>${l.strengthKg} kg</b> (big fish can snap weak line)`)).join("");
+    rodList.innerHTML = rods.map(r => itemHtml(r, `Max: <b>${r.rodMaxKg} kg</b> · Bite +${Math.round(r.biteBonus*100)}% · Big +${Math.round(r.bigBonus*100)}%`, id=>id===equippedRodId)).join("");
+    reelList.innerHTML = reels.map(r => itemHtml(r, `Power: <b>${r.reelPower.toFixed(2)}</b> · Drag quality: <b>${r.dragQuality.toFixed(2)}</b>`, id=>id===equippedReelId)).join("");
+    lineList.innerHTML = lines.map(l => itemHtml(l, `Strength: <b>${l.strengthKg} kg</b>`, id=>id===equippedLineId)).join("");
+    floatList.innerHTML = floats.map(f => itemHtml(f, `Stability: <b>${f.stability.toFixed(2)}</b> · Bite +${Math.round(f.biteBonus*100)}%`, id=>id===equippedFloatId)).join("");
+    hookList.innerHTML = hooks.map(h => itemHtml(h, `Hook size: <b>${h.hookSize.toFixed(2)}</b> (bigger = less escape on big fish)`, id=>id===equippedHookId)).join("");
     baitList.innerHTML = baits.map(b => itemHtml(b, `Attracts: ${
-      b.bias==="peaceful" ? "peaceful fish (bream/crucian)" :
-      b.bias==="carp" ? "carp more often" : "predators (zander/pike/catfish)"
-    }`)).join("");
+      b.bias==="peaceful" ? "peaceful fish" :
+      b.bias==="carp" ? "carp more often" : "predators"
+    }`, id=>id===equippedBaitId)).join("");
 
     shopPanel.querySelectorAll("button[data-id]").forEach(btn=>{
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-id");
+        const all = [...rods, ...reels, ...lines, ...floats, ...hooks, ...baits];
+        const name = all.find(x=>x.id===id)?.name || id;
+
         if(isOwned(id)){
           equip(id);
           renderShop();
-          log(`✅ Equipped: <b>${(rods.concat(lines,baits).find(x=>x.id===id)?.name)||id}</b>.`);
+          updateSetupPanel();
+          log(`✅ Equipped: <b>${name}</b>.`);
           updateHud();
-        }else{
+        } else {
           if(buy(id)){
             equip(id);
             renderShop();
-            log(`🛒 Bought & equipped: <b>${(rods.concat(lines,baits).find(x=>x.id===id)?.name)||id}</b>.`);
+            updateSetupPanel();
+            log(`🛒 Bought & equipped: <b>${name}</b>.`);
             updateHud();
           }
         }
@@ -454,27 +1114,23 @@
   }
 
   // Starter items owned
-  rods.forEach(r=>{ if(r.price===0) setOwned(r.id); });
-  lines.forEach(l=>{ if(l.price===0) setOwned(l.id); });
-  baits.forEach(b=>{ if(b.price===0) setOwned(b.id); });
+  [...rods, ...reels, ...lines, ...floats, ...hooks, ...baits].forEach(it=>{ if(it.price===0) setOwned(it.id); });
 
-  // ---------- Fish system (real Europe, simplified) ----------
+  // ---------- Fish DB ----------
   const fishDB = [
-    {name:"Crucian Carp", min:0.30, max:1.50, priceKg: 8,  group:"peaceful"},
-    {name:"Bream",        min:0.50, max:3.00, priceKg:10,  group:"peaceful"},
-    {name:"Chub",         min:0.40, max:2.20, priceKg:11,  group:"peaceful"},
-    {name:"Common Carp",  min:1.00, max:20.0, priceKg:12,  group:"carp"},
-    {name:"Trout",        min:0.50, max:6.00, priceKg:22,  group:"river"},
-    {name:"Zander",       min:1.00, max:15.0, priceKg:20,  group:"predator"},
-    {name:"Catfish",      min:5.00, max:80.0, priceKg:30,  group:"predator"},
-    {name:"Pike",         min:1.50, max:18.0, priceKg:21,  group:"predator"},
+    {name:"Crucian Carp", min:0.30, max:1.50, priceKg: 8,  group:"peaceful", preferredDepth:[0.8, 2.5], fightStyle:"calm"},
+    {name:"Bream",        min:0.50, max:3.00, priceKg:10,  group:"peaceful", preferredDepth:[1.2, 4.0], fightStyle:"steady"},
+    {name:"Chub",         min:0.40, max:2.20, priceKg:11,  group:"peaceful", preferredDepth:[0.6, 2.0], fightStyle:"jerky"},
+    {name:"Common Carp",  min:1.00, max:20.0, priceKg:12,  group:"carp",     preferredDepth:[1.5, 6.5], fightStyle:"powerful"},
+    {name:"Trout",        min:0.50, max:6.00, priceKg:22,  group:"river",    preferredDepth:[0.6, 3.0], fightStyle:"acrobatic"},
+    {name:"Zander",       min:1.00, max:15.0, priceKg:20,  group:"predator", preferredDepth:[2.0, 7.5], fightStyle:"aggressive"},
+    {name:"Catfish",      min:5.00, max:80.0, priceKg:30,  group:"predator", preferredDepth:[3.0, 8.0], fightStyle:"brute"},
+    {name:"Pike",         min:1.50, max:18.0, priceKg:21,  group:"predator", preferredDepth:[1.0, 4.5], fightStyle:"sudden"},
   ];
 
   function rarityRoll(){
     let r = Math.random()*100;
-    const nightBoost = isNight ? 1.10 : 1.0;
-
-    // Approx: legendary 0.3, epic 1.7, rare 8, uncommon 18, rest common
+    const nightBoost = isNight ? 1.12 : 1.0;
     if(r < 0.30*nightBoost) return "legendary";
     if(r < (0.30*nightBoost) + 1.70*nightBoost) return "epic";
     if(r < (0.30+1.70)*nightBoost + 8.0*nightBoost) return "rare";
@@ -482,25 +1138,41 @@
     return "common";
   }
 
+  function depthAffinity(f, depth){
+    const [a,b] = f.preferredDepth;
+    const mid = (a+b)/2;
+    const span = Math.max(0.6, (b-a));
+    const d = Math.abs(depth - mid) / span;
+    return clamp(1.0 - 0.6*d, 0.35, 1.15);
+  }
+
   function pickSpecies(){
     const bait = getBait();
     const rod = getRod();
+    const fl = getFloat();
+    const hk = getHook();
+
+    const depth = floatDepthM;
 
     const weights = fishDB.map(f => {
       let w = 1;
 
       // bait bias
       if(bait.bias==="peaceful") w *= (f.group==="peaceful" ? 2.2 : (f.group==="predator" ? 0.6 : 1));
-      if(bait.bias==="carp")     w *= (f.group==="carp" ? 2.4 : (f.group==="peaceful" ? 1.2 : 0.7));
-      if(bait.bias==="predator") w *= (f.group==="predator" ? 2.6 : 0.6);
+      if(bait.bias==="carp")     w *= (f.group==="carp" ? 2.5 : (f.group==="peaceful" ? 1.2 : 0.65));
+      if(bait.bias==="predator") w *= (f.group==="predator" ? 2.7 : 0.55);
 
-      // night bias
-      if(isNight && f.group==="predator") w *= 1.2;
-      if(isNight && f.name==="Catfish") w *= 1.6;
+      // depth preference
+      w *= depthAffinity(f, depth);
 
-      // rod big bonus slightly biases toward bigger-max species
+      // float makes bites slightly better
+      w *= (1 + fl.biteBonus);
+
+      // hook size influences species weight a bit
+      w *= (0.92 + 0.10*hk.hookSize);
+
+      // rod big bonus slightly increases big species presence
       w *= (1 + rod.bigBonus * (f.max / 20));
-
       return w;
     });
 
@@ -517,74 +1189,441 @@
     const sp = pickSpecies();
     const rarity = rarityRoll();
     const rod = getRod();
+    const hk = getHook();
 
     let w = rand(sp.min, sp.max);
 
     const rarMul = { common:1.00, uncommon:1.10, rare:1.25, epic:1.55, legendary:1.90 }[rarity] || 1;
     const bigPush = 1 + rod.bigBonus * 0.9;
 
-    w = Math.min(sp.max, w * rarMul * bigPush);
+    // hook affects landing big fish
+    const hookMul = 0.95 + 0.12*hk.hookSize;
 
+    w = Math.min(sp.max, w * rarMul * bigPush * hookMul);
     const trophy = (w >= sp.max * 0.88);
 
     const baseVal = w * sp.priceKg;
     const rarValMul = { common:1.0, uncommon:1.15, rare:1.4, epic:2.0, legendary:3.0 }[rarity] || 1.0;
     const value = Math.max(1, Math.floor(baseVal * rarValMul));
 
-    return { name: sp.name, rarity, kg: w, value, trophy };
+    return { 
+      name: sp.name, 
+      rarity, 
+      kg: w, 
+      value, 
+      trophy,
+      fightStyle: sp.fightStyle,
+      preferredDepth: sp.preferredDepth
+    };
   }
 
-  // ---------- Fishing scene ----------
-  const fisher = { x: 86, y: shoreY-18 };
-  const bobber = { x: fisher.x+22, y: fisher.y+14, vx:0, vy:0, inWater:false };
+  // ---------- Scene ----------
+  const fisher = { x: 92, y: shoreY-18 };
+  const bobber = { 
+    x: fisher.x+22, 
+    y: fisher.y+14, 
+    targetX: fisher.x+22,
+    targetY: fisher.y+14,
+    inWater: false,
+    splashTimer: 0
+  };
 
-  // States: ready -> casting -> waiting -> bite -> fight -> (snapped/miss)
+  // States
   let state = "ready";
   let biteAt = 0, missAt = 0;
+  let selectedCastX = 0, selectedCastY = 0;
+  let showCastingTarget = false;
 
-  // Fight minigame
-  let hookedFish = null;
-  let tension = 0;
-  let fishPull = 0;
-  let holdingReel = false;
-  let fightEndAt = 0;
-  let fightDuration = 1;
-
-  function startCasting(){
-    if(state !== "ready") return;
-
-    setState("casting");
-    log("🎯 You cast the line...");
-
-    const targetX = 260 + Math.random()*150;
-    const targetY = waterY + 65 + Math.random()*80;
-
-    bobber.x = fisher.x + 22;
-    bobber.y = fisher.y + 14;
-    bobber.vx = (targetX - bobber.x)/18;
-    bobber.vy = (targetY - bobber.y)/18;
-    bobber.inWater = false;
-
-    const now = performance.now();
-    const rod = getRod();
-    const baseWait = 900 + Math.random()*1600;
-    const speedFactor = 1 - (rod.biteBonus + (isNight ? 0.04 : 0));
-    biteAt = now + baseWait * clamp(speedFactor, 0.75, 1.05);
-    missAt = biteAt + 1600;
+  function setState(s){
+    state = s;
+    stateEl.textContent = ({
+      ready:"ready",
+      casting:"casting...",
+      waiting:"waiting...",
+      bite:"BITE!",
+      fight:"FIGHT!",
+      miss:"missed",
+      snapped:"line snapped"
+    }[s] || s);
+    
+    // Show/hide fight controls
+    if(s === "fight"){
+      fightControls.style.display = "flex";
+    } else {
+      fightControls.style.display = "none";
+    }
   }
+
+  // ---------- REALISTIC Fight system ----------
+  let hookedFish = null;
+  let fishInWater = { x: 0, y: 0, rotation: 0 };
+
+  const fight = {
+    active: false,
+    distance: 15.0,     // meters from shore
+    depth: 2.0,         // meters
+    tension: 0.15,      // 0..1
+    fatigue: 0.0,       // 0..1 (fish gets tired)
+    stamina: 1.0,       // 0..1 (player stamina)
+    redHold: 0.0,
+    badHold: 0.0,
+    dir: 1,             // lateral direction
+    drag: 0.55,         // current drag slider
+    lastUpdate: 0,
+    fightStartTime: 0,
+    burstTimer: 0,
+    calmTimer: 0,
+    lastDirectionChange: 0
+  };
+
+  let holdingReel = false;
+  let lastReelPress = 0;
 
   function startFight(fish){
     hookedFish = fish;
     setState("fight");
-    tension = 0.15;
-    fishPull = 0;
-    holdingReel = false;
+    fight.active = true;
 
-    fightDuration = (1100 + fish.kg*30);
-    fightEndAt = performance.now() + fightDuration;
+    fight.depth = floatDepthM;
+    fight.distance = clamp(8 + Math.random()*20 + fish.kg*0.15, 5, 50);
+
+    fight.tension = 0.18;
+    fight.fatigue = 0;
+    fight.stamina = 1.0;
+    fight.redHold = 0;
+    fight.badHold = 0;
+    fight.dir = Math.random()<0.5 ? -1 : 1;
+    fight.drag = defaultDrag;
+    dragSlider.value = String(fight.drag);
+    dragTxt.textContent = fight.drag.toFixed(2);
+
+    fight.lastUpdate = performance.now();
+    fight.fightStartTime = performance.now();
+    fight.burstTimer = 0;
+    fight.calmTimer = 0;
+    fight.lastDirectionChange = 0;
+
+    // Set fish position in water
+    fishInWater.x = bobber.x;
+    fishInWater.y = bobber.y;
+    fishInWater.rotation = 0;
+
+    const styleText = {
+      "calm": "It will fight steadily.",
+      "steady": "It will pull consistently.",
+      "jerky": "It will make sudden movements.",
+      "powerful": "It has strong, steady pulls.",
+      "acrobatic": "It will jump and change direction.",
+      "aggressive": "It fights fiercely!",
+      "brute": "It's a brute force fighter!",
+      "sudden": "It makes sudden bursts!"
+    }[fish.fightStyle] || "It fights normally.";
 
     log(`🎣 Hooked! <b style="color:${rarColor(fish.rarity)}">${fish.name}</b> (${fmt2(fish.kg)} kg, ${fish.rarity}${fish.trophy ? " · TROPHY" : ""})<br>
-         Hold <b>Reel</b> to pull in, but keep tension under control.`);
+         ${styleText} Hold <b>Reel</b> to pull. Use <b>DRAG</b> to control tension.`);
+  }
+
+  function failFight(type){
+    fight.active = false;
+    holdingReel = false;
+    hookedFish = null;
+    if(type==="snapped"){
+      setState("snapped");
+      log("💥 LINE SNAPPED! Too much tension for your gear.");
+    }else{
+      setState("miss");
+      log("🏃 The fish escaped! The hook came loose.");
+    }
+    resetBobberToShore();
+  }
+
+  function winFight(){
+    const fish = hookedFish;
+    fight.active = false;
+    holdingReel = false;
+    hookedFish = null;
+
+    logbookUpdate(fish);
+
+    const ok = addToKeepnet(fish);
+    if(ok){
+      log(`✅ Landed fish! <b style="color:${rarColor(fish.rarity)}">${fish.name}</b><br>
+           ⚖️ <b>${fmt2(fish.kg)}</b> kg · <b style="color:${rarColor(fish.rarity)}">${fish.rarity}</b>${fish.trophy ? " · <b style='color:#ffcc33'>TROPHY</b>" : ""}<br>
+           🎒 Stored in keepnet. Sell from Inventory anytime.`);
+    }
+    setState("ready");
+    resetBobberToShore();
+    updateHud();
+    saveAll();
+  }
+
+  function resetBobberToShore(){
+    bobber.x = fisher.x + 22;
+    bobber.y = fisher.y + 14;
+    bobber.targetX = fisher.x + 22;
+    bobber.targetY = fisher.y + 14;
+    bobber.inWater = false;
+    bobber.splashTimer = 0;
+  }
+
+  function cutLine(){
+    if(state === "fight" && fight.active){
+      fight.active = false;
+      holdingReel = false;
+      hookedFish = null;
+      setState("ready");
+      resetBobberToShore();
+      log("✂️ You cut the line and released the fish.");
+    }
+  }
+
+  cutLineBtn.addEventListener("click", cutLine);
+
+  function getFightStyleMultiplier(fish){
+    const style = fish.fightStyle;
+    const multipliers = {
+      "calm": {power: 0.7, burst: 0.3, endurance: 1.3},
+      "steady": {power: 0.8, burst: 0.4, endurance: 1.2},
+      "jerky": {power: 0.6, burst: 0.7, endurance: 0.9},
+      "powerful": {power: 1.2, burst: 0.5, endurance: 1.1},
+      "acrobatic": {power: 0.9, burst: 0.8, endurance: 0.8},
+      "aggressive": {power: 1.1, burst: 0.9, endurance: 0.9},
+      "brute": {power: 1.4, burst: 0.6, endurance: 1.0},
+      "sudden": {power: 0.8, burst: 1.0, endurance: 0.7}
+    };
+    return multipliers[style] || {power: 0.8, burst: 0.5, endurance: 1.0};
+  }
+
+  function updateFight(dt){
+    if(!fight.active || !hookedFish) return;
+
+    const now = performance.now();
+    const fightTime = (now - fight.fightStartTime) / 1000;
+    
+    const rod = getRod();
+    const reel = getReel();
+    const line = getLine();
+    const fl = getFloat();
+    const hk = getHook();
+
+    const fishKg = hookedFish.kg;
+    const style = getFightStyleMultiplier(hookedFish);
+
+    // Fish behavior patterns
+    fight.burstTimer += dt;
+    fight.calmTimer += dt;
+    
+    let fishPower = 0;
+    let fishActivity = 0;
+    
+    // Different fish have different fight patterns
+    switch(hookedFish.fightStyle) {
+      case "calm":
+        fishActivity = Math.sin(fightTime * 0.5) * 0.3 + 0.4;
+        fishPower = 0.6 + Math.sin(fightTime * 0.3) * 0.2;
+        break;
+      case "steady":
+        fishActivity = 0.5 + Math.sin(fightTime * 0.8) * 0.2;
+        fishPower = 0.7 + Math.sin(fightTime * 0.4) * 0.3;
+        break;
+      case "jerky":
+        if(fight.burstTimer > 1.5) {
+          fishActivity = 0.8;
+          fishPower = 0.9;
+          if(fight.burstTimer > 2.0) {
+            fight.burstTimer = 0;
+            fight.dir *= -1;
+          }
+        } else {
+          fishActivity = 0.3;
+          fishPower = 0.4;
+        }
+        break;
+      case "powerful":
+        fishActivity = 0.6 + Math.sin(fightTime * 0.4) * 0.3;
+        fishPower = 1.0 + Math.sin(fightTime * 0.3) * 0.4;
+        break;
+      case "acrobatic":
+        if(now - fight.lastDirectionChange > 2000) {
+          fight.dir *= Math.random() > 0.5 ? -1 : 1;
+          fight.lastDirectionChange = now;
+        }
+        fishActivity = 0.7 + Math.sin(fightTime * 1.2) * 0.3;
+        fishPower = 0.8 + Math.sin(fightTime * 0.8) * 0.4;
+        break;
+      case "aggressive":
+        fishActivity = 0.8 + Math.sin(fightTime * 1.0) * 0.2;
+        fishPower = 1.1 + Math.sin(fightTime * 0.6) * 0.3;
+        break;
+      case "brute":
+        fishActivity = 0.5;
+        fishPower = 1.3;
+        break;
+      case "sudden":
+        if(fight.burstTimer > 2.0) {
+          fishActivity = 1.0;
+          fishPower = 1.2;
+          if(fight.burstTimer > 2.5) {
+            fight.burstTimer = 0;
+          }
+        } else {
+          fishActivity = 0.2;
+          fishPower = 0.3;
+        }
+        break;
+    }
+
+    // Apply style multipliers
+    fishActivity *= style.burst;
+    fishPower *= style.power;
+
+    // Fish gets tired over time (based on endurance)
+    const fatigueRate = 0.02 / style.endurance;
+    fight.fatigue = clamp01(fight.fatigue + fatigueRate * dt);
+    const fatigueMul = 1.0 - 0.6 * fight.fatigue;
+
+    // Reel in power (player action)
+    const reelIn = holdingReel ? (0.9 * reel.reelPower) : 0.0;
+    
+    // Player stamina management
+    if(holdingReel) {
+      fight.stamina = Math.max(0.3, fight.stamina - 0.15 * dt);
+    } else {
+      fight.stamina = Math.min(1.0, fight.stamina + 0.1 * dt);
+    }
+    
+    const effectiveReelIn = reelIn * fight.stamina;
+
+    // Fish tries to swim away
+    const fishSwimPower = fishPower * fishActivity * fatigueMul;
+    const fishSwimAway = fishSwimPower * 0.12;
+
+    // Distance calculation
+    const distanceChange = fishSwimAway - effectiveReelIn;
+    fight.distance = clamp(fight.distance + distanceChange * dt, 0, 60);
+
+    // Tension calculation (more realistic)
+    const drag = clamp(fight.drag, 0.15, 0.95);
+    const dragQuality = reel.dragQuality;
+    
+    // Base tension from distance
+    const distanceTension = clamp01(fight.distance / 40);
+    
+    // Tension from fish activity
+    const activityTension = fishActivity * 0.4;
+    
+    // Tension from reeling
+    const reelingTension = holdingReel ? 0.3 : 0;
+    
+    // Combine tensions
+    let targetTension = 0.1 + distanceTension * 0.3 + activityTension * 0.4 + reelingTension * 0.2;
+    
+    // Apply float stability
+    targetTension = 0.1 + (targetTension - 0.1) / fl.stability;
+    
+    // Smooth tension change
+    fight.tension += (targetTension - fight.tension) * clamp01(dt * 4.0);
+    fight.tension = clamp01(fight.tension);
+
+    // Line slip simulation
+    const tensionAboveDrag = Math.max(0, fight.tension - drag);
+    const slip = tensionAboveDrag * 3.0;
+    const lineSlip = slip * (1.0 - dragQuality * 0.5) * dt;
+    
+    fight.distance += lineSlip;
+
+    // Failure conditions
+    const effMax = Math.min(rod.rodMaxKg, line.strengthKg);
+    const overload = Math.max(0, (fishKg - effMax) / effMax);
+    
+    // Break threshold depends on gear
+    const breakThreshold = 0.88 - 0.25 * clamp01(overload);
+    
+    if(fight.tension > breakThreshold) {
+      fight.redHold += dt;
+      if(fight.redHold > 1.5) {
+        failFight("snapped");
+        return;
+      }
+    } else {
+      fight.redHold = Math.max(0, fight.redHold - dt * 2.0);
+    }
+
+    // Escape chance (hook size matters)
+    const escapeResist = 0.7 + 0.4 * hk.hookSize;
+    const escapeChance = (1.0 - escapeResist) * 0.01 * dt;
+    
+    if(Math.random() < escapeChance && fightTime > 5) {
+      failFight("escape");
+      return;
+    }
+
+    // Win condition
+    if(fight.distance <= 1.0) {
+      winFight();
+      return;
+    }
+
+    // Update fish position in water for drawing
+    const lateralMovement = fishActivity * fight.dir * 2.0;
+    fishInWater.x += lateralMovement * dt;
+    fishInWater.y = waterY + 30 + Math.sin(now * 0.001) * 5;
+    fishInWater.rotation = Math.sin(now * 0.002) * 0.3;
+
+    // Update bobber position based on fish
+    bobber.targetX = fishInWater.x;
+    bobber.targetY = fishInWater.y - 5;
+  }
+
+  // ---------- Casting ----------
+  function showCastingIndicator(x, y){
+    selectedCastX = x;
+    selectedCastY = y;
+    showCastingTarget = true;
+    
+    const rect = canvas.getBoundingClientRect();
+    castingTarget.style.left = (rect.left + x * (rect.width / W) - 6) + 'px';
+    castingTarget.style.top = (rect.top + y * (rect.height / H) - 6) + 'px';
+    castingTarget.style.display = 'block';
+    
+    setTimeout(() => {
+      castingTarget.style.display = 'none';
+      showCastingTarget = false;
+    }, 1000);
+  }
+
+  function startCasting(){
+    if(state !== "ready") return;
+    
+    // Random cast if no target selected
+    const targetX = 280 + Math.random()*160;
+    const targetY = waterY + 70 + Math.random()*90;
+    startCastingTo(targetX, targetY, false);
+  }
+
+  function startCastingTo(targetX, targetY, fromTap){
+    if(state !== "ready") return;
+
+    setState("casting");
+    log(`🎯 Casting to selected spot... (depth <b>${floatDepthM.toFixed(1)}m</b>)`);
+
+    // Clamp to water area
+    targetX = clamp(targetX, 150, W-14);
+    targetY = clamp(targetY, waterY + 40, H-18);
+
+    bobber.targetX = targetX;
+    bobber.targetY = targetY;
+    bobber.inWater = false;
+    bobber.splashTimer = 0;
+
+    const now = performance.now();
+    const rod = getRod();
+    const fl = getFloat();
+
+    const baseWait = 1000 + Math.random()*1200;
+    const speedFactor = 1 - (rod.biteBonus + fl.biteBonus + (isNight ? 0.05 : 0));
+    biteAt = now + baseWait * clamp(speedFactor, 0.75, 1.10);
+    missAt = biteAt + 1500;
   }
 
   function onReelTap(){
@@ -593,6 +1632,7 @@
     if(state==="waiting"){
       log("🫧 Reeled too early... nothing.");
       setState("ready");
+      resetBobberToShore();
       return;
     }
 
@@ -605,45 +1645,166 @@
     if(state==="miss" || state==="snapped"){
       log("🎣 Try again.");
       setState("ready");
+      resetBobberToShore();
       return;
     }
   }
 
   // Hold-to-reel
-  reelBtn.addEventListener("pointerdown", (e) => { holdingReel = true; e.preventDefault(); });
+  reelBtn.addEventListener("pointerdown", (e) => { 
+    holdingReel = true; 
+    lastReelPress = performance.now();
+    e.preventDefault(); 
+  });
   reelBtn.addEventListener("pointerup",   (e) => { holdingReel = false; e.preventDefault(); });
   reelBtn.addEventListener("pointercancel",(e)=>{ holdingReel = false; e.preventDefault(); });
   reelBtn.addEventListener("click", onReelTap);
 
   castBtn.addEventListener("click", startCasting);
 
-  // Canvas tap / double tap
+  // Canvas tap - cast where you click
   let lastTap = 0;
-  canvas.addEventListener("pointerdown", () => {
+  canvas.addEventListener("pointerdown", (ev) => {
     const now = Date.now();
-    if(now - lastTap < 300) onReelTap();
-    else startCasting();
+    const rect = canvas.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * (W / rect.width);
+    const y = (ev.clientY - rect.top) * (H / rect.height);
+
+    // Double tap for reel
+    if(now - lastTap < 300){
+      onReelTap();
+      lastTap = now;
+      return;
+    }
     lastTap = now;
+
+    // Show casting indicator
+    showCastingIndicator(x, y);
+    
+    // Start casting to that position after a brief delay
+    setTimeout(() => {
+      if(state === "ready") {
+        startCastingTo(x, y, true);
+      }
+    }, 100);
   });
 
   // Panels
   invBtn.addEventListener("click", () => { invPanel.style.display="flex"; renderInventory(); });
   invClose.addEventListener("click", () => { invPanel.style.display="none"; });
+
+  logBtn.addEventListener("click", () => { logPanel.style.display="flex"; renderLogbook(); });
+  logClose.addEventListener("click", () => { logPanel.style.display="none"; });
+  resetLogBtn.addEventListener("click", () => {
+    logbook = { totalCaught: 0, totalKgCaught: 0, species: {} };
+    saveAll();
+    renderLogbook();
+  });
+  copyLogBtn.addEventListener("click", async () => {
+    try{
+      const txt = JSON.stringify(logbook, null, 2);
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(txt);
+        log("📋 Logbook copied to clipboard.");
+      } else {
+        log("📋 Clipboard not available. Open DevTools to copy from console.");
+        console.log(txt);
+      }
+    }catch(e){
+      log("❌ Could not copy logbook.");
+    }
+  });
+
   shopBtn.addEventListener("click", () => { shopPanel.style.display="flex"; renderShop(); });
   shopClose.addEventListener("click", () => { shopPanel.style.display="none"; });
 
-  // Day / Night
+  setupBtn.addEventListener("click", () => { setupPanel.style.display="flex"; updateSetupPanel(true); });
+  setupClose.addEventListener("click", () => { setupPanel.style.display="none"; });
+
+  // Day/Night
   function updateDayBtn(){
     dayBtn.textContent = isNight ? "☀️ Day" : "🌙 Night";
   }
   dayBtn.addEventListener("click", () => {
     isNight = !isNight;
-    localStorage.setItem("pf_night", isNight ? "1":"0");
+    saveAll();
     updateDayBtn();
     log(isNight ? "🌙 Night time. Predators get more active." : "☀️ Day time. Common fish are more consistent.");
   });
 
-  // iOS: prevent double-tap zoom
+  // Setup UI
+  function updateSetupPanel(fillSelects=false){
+    depthSlider.value = String(floatDepthM);
+    depthTxt.textContent = floatDepthM.toFixed(1);
+
+    dragSlider.value = String(defaultDrag);
+    dragTxt.textContent = defaultDrag.toFixed(2);
+
+    if(fillSelects){
+      const opt = (id, name, owned, selected) =>
+        `<option value="${id}" ${selected?"selected":""} ${owned?"":"disabled"}>${name}${owned?"":" (buy in shop)"}</option>`;
+
+      hookSelect.innerHTML = hooks.map(h=>opt(h.id, h.name, isOwned(h.id), h.id===equippedHookId)).join("");
+      floatSelect.innerHTML = floats.map(f=>opt(f.id, f.name, isOwned(f.id), f.id===equippedFloatId)).join("");
+      reelSelect.innerHTML = reels.map(r=>opt(r.id, r.name, isOwned(r.id), r.id===equippedReelId)).join("");
+      baitSelect.innerHTML = baits.map(b=>opt(b.id, b.name, isOwned(b.id), b.id===equippedBaitId)).join("");
+    }
+
+    const rod = getRod(), reel = getReel(), line = getLine(), fl = getFloat(), hk = getHook(), bait = getBait();
+    setupSummary.innerHTML = `
+      🎣 <b>${rod.name}</b> (max ${rod.rodMaxKg}kg)<br>
+      🌀 <b>${reel.name}</b> (power ${reel.reelPower.toFixed(2)}, dragQ ${reel.dragQuality.toFixed(2)})<br>
+      🧵 <b>${line.name}</b> (${line.strengthKg}kg)<br>
+      🎈 <b>${fl.name}</b> (stab ${fl.stability.toFixed(2)})<br>
+      🪝 <b>${hk.name}</b> (size ${hk.hookSize.toFixed(2)})<br>
+      🪱 <b>${bait.name}</b><br>
+      🎚 Depth: <b>${floatDepthM.toFixed(1)}m</b> · Default drag: <b>${defaultDrag.toFixed(2)}</b>
+    `;
+  }
+
+  depthSlider.addEventListener("input", ()=>{
+    floatDepthM = Number(depthSlider.value);
+    depthTxt.textContent = floatDepthM.toFixed(1);
+  });
+  dragSlider.addEventListener("input", ()=>{
+    defaultDrag = Number(dragSlider.value);
+    dragTxt.textContent = defaultDrag.toFixed(2);
+  });
+
+  applySetupBtn.addEventListener("click", ()=>{
+    const h = hookSelect.value;
+    const f = floatSelect.value;
+    const r = reelSelect.value;
+    const b = baitSelect.value;
+
+    if(isOwned(h)) equippedHookId = h;
+    if(isOwned(f)) equippedFloatId = f;
+    if(isOwned(r)) equippedReelId = r;
+    if(isOwned(b)) equippedBaitId = b;
+
+    saveAll();
+    updateSetupPanel();
+    log("✅ Setup applied.");
+  });
+
+  resetSaveBtn.addEventListener("click", ()=>{
+    localStorage.removeItem(SAVE_KEY);
+    location.reload();
+  });
+
+  dragSlider.addEventListener("input", ()=>{
+    const v = Number(dragSlider.value);
+    if(state==="fight" && fight.active){
+      fight.drag = v;
+      dragTxt.textContent = v.toFixed(2);
+    } else {
+      defaultDrag = v;
+      dragTxt.textContent = v.toFixed(2);
+    }
+    saveAll();
+  });
+
+  // ---------- iOS prevent double tap zoom ----------
   let lastTouchEnd = 0;
   document.addEventListener("touchend", (e) => {
     const now = Date.now();
@@ -658,202 +1819,291 @@
   }
 
   function drawFightHud(){
+    const rod = getRod();
     const line = getLine();
 
-    const x = 12, y = 12, w = W-24, h = 14;
-
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fillRect(x-4, y-6, w+8, 42);
-
-    ctx.fillStyle = "#eaf2ff";
-    ctx.font = "12px monospace";
-    ctx.fillText(`Tension (line ${line.strengthKg}kg)`, x, y-1);
-
-    ctx.fillStyle = "#16263c";
-    ctx.fillRect(x, y+6, w, h);
+    // Background
+    ctx.fillStyle = "rgba(10, 20, 40, 0.8)";
+    ctx.fillRect(10, 8, W-20, 74);
     ctx.strokeStyle = "#2a3a55";
-    ctx.strokeRect(x, y+6, w, h);
+    ctx.strokeRect(10, 8, W-20, 74);
 
-    const pct = clamp(tension, 0, 1.1);
-    const fillW = (pct/1.0) * w;
+    // Tension bar
+    const x = 18, y = 18, w = W-36, h = 12;
+    ctx.fillStyle = "#16263c";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#2a3a55";
+    ctx.strokeRect(x, y, w, h);
+
+    const pct = clamp01(fight.tension);
+    const fillW = pct * w;
 
     let col = "#2ecc71";
-    if(pct > 0.75) col = "#ffcc33";
-    if(pct > 0.95) col = "#ff4d6d";
+    if(pct > 0.65) col = "#ffcc33";
+    if(pct > 0.85) col = "#ff4d6d";
 
     ctx.fillStyle = col;
-    ctx.fillRect(x, y+6, Math.min(fillW, w), h);
+    ctx.fillRect(x, y, fillW, h);
 
-    const prog = clamp(1 - (fightEndAt - performance.now()) / fightDuration, 0, 1);
+    // Stamina bar
+    const staminaY = y + h + 10;
+    ctx.fillStyle = "#16263c";
+    ctx.fillRect(x, staminaY, w, 8);
+    ctx.strokeStyle = "#2a3a55";
+    ctx.strokeRect(x, staminaY, w, 8);
+
+    const staminaW = fight.stamina * w;
+    ctx.fillStyle = "#3498db";
+    ctx.fillRect(x, staminaY, staminaW, 8);
+
+    // Text
     ctx.fillStyle = "#eaf2ff";
-    ctx.fillText(`Progress: ${Math.round(prog*100)}%`, x, y+36);
+    ctx.font = "11px monospace";
+    ctx.fillText(`Tension (rod ${rod.rodMaxKg}kg / line ${line.strengthKg}kg)`, x, y-4);
+    ctx.fillText(`Stamina`, x, staminaY-4);
+    ctx.fillText(`Distance: ${fight.distance.toFixed(1)}m`, x, staminaY+25);
+    ctx.fillText(`Fish fatigue: ${Math.round(fight.fatigue*100)}%`, x+150, staminaY+25);
+    ctx.fillText(`DRAG: ${fight.drag.toFixed(2)}`, x, staminaY+40);
+    
+    if(hookedFish) {
+      ctx.fillText(`${hookedFish.fightStyle.toUpperCase()} fight`, x+150, staminaY+40);
+    }
+  }
+
+  function drawFishInWater(fish, x, y, rotation){
+    const spr = getFishSpriteCanvas(fish.name);
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.drawImage(spr, -28, -13, 56, 26);
+    ctx.restore();
+  }
+
+  function drawSplash(x, y, size){
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    for(let i = 0; i < 5; i++){
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * size;
+      const sx = Math.cos(angle) * radius;
+      const sy = Math.sin(angle) * radius;
+      ctx.fillRect(x + sx - 1, y + sy - 1, 2, 2);
+    }
   }
 
   function drawScene(t){
-    // sky
-    drawPixelRect(0,0,W,H, isNight ? "#061022" : "#08101a");
-    // far mountains
-    drawPixelRect(0,32,W,60, isNight ? "#07152c" : "#0d1b2a");
+    // Clear canvas
+    ctx.clearRect(0, 0, W, H);
 
-    // stars
+    // Sky
+    drawPixelRect(0, 0, W, H, isNight ? "#061022" : "#08101a");
+    
+    // Distant background
+    drawPixelRect(0, 34, W, 60, isNight ? "#07152c" : "#0d1b2a");
+
+    // Stars at night
     if(isNight){
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      for(let i=0;i<35;i++){
-        const sx = (i*73 + 19) % W;
-        const sy = (i*29 + 11) % 70;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      for(let i = 0; i < 30; i++){
+        const sx = (i * 97 + 23) % W;
+        const sy = (i * 43 + 17) % 70;
         ctx.fillRect(sx, sy, 1, 1);
+        if(i % 3 === 0) ctx.fillRect(sx+1, sy, 1, 1);
       }
     }
 
-    // shore
-    drawPixelRect(0,shoreY-18,W,18, isNight ? "#24211d" : "#2d2a24");
-    drawPixelRect(0,shoreY-10,W,10, isNight ? "#2f2a24" : "#3a342d");
+    // Shore
+    drawPixelRect(0, shoreY-18, W, 18, isNight ? "#24211d" : "#2d2a24");
+    drawPixelRect(0, shoreY-10, W, 10, isNight ? "#2f2a24" : "#3a342d");
 
-    // water
-    drawPixelRect(0,waterY,W,H-waterY, isNight ? "#06747a" : "#0a9396");
+    // Water
+    const waterGradient = ctx.createLinearGradient(0, waterY, 0, H);
+    if(isNight){
+      waterGradient.addColorStop(0, "#0a5560");
+      waterGradient.addColorStop(1, "#033840");
+    } else {
+      waterGradient.addColorStop(0, "#0a9396");
+      waterGradient.addColorStop(1, "#06747a");
+    }
+    ctx.fillStyle = waterGradient;
+    ctx.fillRect(0, waterY, W, H-waterY);
 
-    // waves
-    for(let i=0;i<10;i++){
-      const y = waterY + 10 + i*14 + (Math.sin(t/700 + i)*2);
-      drawPixelRect(0,y,W,2,"rgba(148,210,189,0.30)");
+    // Water waves
+    ctx.fillStyle = isNight ? "rgba(148, 210, 189, 0.25)" : "rgba(148, 210, 189, 0.35)";
+    for(let i = 0; i < 8; i++){
+      const waveY = waterY + 15 + i * 16 + Math.sin(t/800 + i * 0.5) * 3;
+      const waveWidth = W + Math.sin(t/600 + i) * 20;
+      ctx.fillRect(-10, waveY, waveWidth, 2);
     }
 
-    // fisherman sprite
+    // Fisherman
     drawPixelRect(fisher.x, fisher.y, 8, 14, "#c27c5a");
     drawPixelRect(fisher.x+2, fisher.y-6, 6, 6, "#f1c27d");
     drawPixelRect(fisher.x+1, fisher.y-8, 8, 3, "#223");
     drawPixelRect(fisher.x-2, fisher.y+10, 5, 8, "#111");
     drawPixelRect(fisher.x+5, fisher.y+10, 5, 8, "#111");
 
-    // rod
-    ctx.strokeStyle = "#c9a227";
+    // Fishing rod
+    ctx.strokeStyle = "#d4af37";
     ctx.lineWidth = 2;
+    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(fisher.x+7, fisher.y+3);
-    ctx.lineTo(fisher.x+44, fisher.y-12);
+    
+    // Rod bends during fight
+    if(state === "fight" && fight.tension > 0.3){
+      const bend = fight.tension * 10;
+      ctx.quadraticCurveTo(
+        fisher.x+30, fisher.y-5 + bend,
+        fisher.x+44, fisher.y-12 + bend*2
+      );
+    } else {
+      ctx.lineTo(fisher.x+44, fisher.y-12);
+    }
     ctx.stroke();
 
-    // line
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(fisher.x+44, fisher.y-12);
-    ctx.lineTo(bobber.x, bobber.y);
-    ctx.stroke();
+    // Fishing line
+    if(bobber.x > fisher.x + 30 || bobber.y > fisher.y + 20){
+      ctx.strokeStyle = state === "fight" ? "rgba(255, 255, 255, 0.9)" : "rgba(255, 255, 255, 0.7)";
+      ctx.lineWidth = state === "fight" ? 1.5 : 1;
+      ctx.setLineDash(state === "fight" && fight.tension > 0.7 ? [3, 2] : []);
+      ctx.beginPath();
+      ctx.moveTo(fisher.x+44, fisher.y-12 + (state === "fight" ? fight.tension * 10 : 0));
+      ctx.lineTo(bobber.x, bobber.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
-    // bobber
-    drawPixelRect(bobber.x-3, bobber.y-3, 6, 6, "#ff4d6d");
-    drawPixelRect(bobber.x-2, bobber.y-6, 4, 3, "#fff");
+    // Bobber with splash effect
+    if(bobber.splashTimer > 0){
+      drawSplash(bobber.x, bobber.y, bobber.splashTimer * 5);
+      bobber.splashTimer -= 0.1;
+    }
 
-    // bite overlay
-    if(state === "bite"){
-      ctx.fillStyle = "rgba(0,0,0,0.25)";
-      ctx.fillRect(0,0,W,H);
+    // Bobber
+    if(bobber.inWater || state === "casting" || state === "waiting" || state === "bite" || state === "fight"){
+      // Animate bobber in water
+      const bobOffset = Math.sin(t/500) * 2;
+      drawPixelRect(bobber.x-3, bobber.y-3 + bobOffset, 6, 6, state === "bite" ? "#ff3333" : "#ff6666");
+      drawPixelRect(bobber.x-2, bobber.y-6 + bobOffset, 4, 3, "#ffffff");
+      
+      // Show fish underwater during fight
+      if(state === "fight" && hookedFish){
+        drawFishInWater(hookedFish, fishInWater.x, fishInWater.y, fishInWater.rotation);
+      }
+    } else {
+      // Bobber on shore
+      drawPixelRect(bobber.x-3, bobber.y-3, 6, 6, "#44ff88");
+      drawPixelRect(bobber.x-2, bobber.y-6, 4, 3, "#ffffff");
+    }
+
+    // Status overlay
+    if(state === "casting"){
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(W/2 - 120, H - 45, 240, 35);
       ctx.fillStyle = "#ffcc33";
-      ctx.font = "bold 26px monospace";
+      ctx.font = "bold 14px monospace";
       ctx.textAlign = "center";
-      ctx.fillText("BITE! Double tap / Reel to hook!", W/2, H/2);
+      ctx.fillText("Casting to selected location...", W/2, H - 25);
+      ctx.textAlign = "start";
+    }
+    else if(state === "waiting"){
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(W/2 - 100, H - 45, 200, 35);
+      ctx.fillStyle = "#4dff88";
+      ctx.font = "bold 14px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("Waiting for bite...", W/2, H - 25);
       ctx.textAlign = "start";
     }
 
-    // fight overlay
+    // Bite overlay
+    if(state === "bite"){
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#ffcc33";
+      ctx.font = "bold 24px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("BITE!", W/2, H/2 - 15);
+      ctx.font = "bold 16px monospace";
+      ctx.fillText("Tap Reel or double tap to hook!", W/2, H/2 + 15);
+      ctx.textAlign = "start";
+    }
+
+    // Fight overlay
     if(state === "fight" && hookedFish){
       drawFightHud();
 
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(12, H-44, W-24, 32);
+      // Fish info panel
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(12, H-50, W-24, 40);
+      ctx.strokeStyle = rarColor(hookedFish.rarity);
+      ctx.strokeRect(12, H-50, W-24, 40);
+      
       ctx.fillStyle = rarColor(hookedFish.rarity);
-      ctx.font = "12px monospace";
-      ctx.fillText(`Fish: ${hookedFish.name} · ${fmt2(hookedFish.kg)} kg · ${hookedFish.rarity}${hookedFish.trophy ? " · TROPHY" : ""}`, 18, H-24);
-      ctx.fillStyle = "#eaf2ff";
-      ctx.fillText(holdingReel ? "Reeling..." : "Hold Reel to pull", 18, H-10);
+      ctx.font = "bold 12px monospace";
+      ctx.fillText(`${hookedFish.name} • ${fmt2(hookedFish.kg)} kg • ${hookedFish.rarity}`, 18, H-32);
+      
+      if(hookedFish.trophy){
+        ctx.fillStyle = "#ffcc33";
+        ctx.fillText("TROPHY!", W-80, H-32);
+      }
+      
+      ctx.fillStyle = holdingReel ? "#4dff88" : "#eaf2ff";
+      ctx.font = "11px monospace";
+      ctx.fillText(holdingReel ? "REELING - Release to regain stamina" : "Hold REEL to pull fish in", 18, H-12);
     }
   }
 
   // ---------- Update loop ----------
   function update(t){
+    // Smooth bobber movement
     if(state === "casting"){
-      bobber.x += bobber.vx;
-      bobber.y += bobber.vy;
-      if(bobber.y >= waterY + 52){
-        bobber.y = waterY + 52;
-        bobber.vx = 0; bobber.vy = 0;
+      const speed = 0.2;
+      bobber.x += (bobber.targetX - bobber.x) * speed;
+      bobber.y += (bobber.targetY - bobber.y) * speed;
+      
+      if(Math.abs(bobber.x - bobber.targetX) < 2 && Math.abs(bobber.y - bobber.targetY) < 2){
         bobber.inWater = true;
+        bobber.splashTimer = 1.0;
         setState("waiting");
       }
     }
 
     if(state === "waiting"){
-      bobber.y = (waterY + 52) + Math.sin(t/260)*1.2;
+      // Gentle bobber movement
+      bobber.y = bobber.targetY + Math.sin(t/300) * 1.5;
       if(t >= biteAt){
         setState("bite");
-        log("‼️ Bite! Tap Reel / double tap to hook.");
+        log("‼️ BITE! Tap Reel / double tap to hook!");
       }
     }
 
     if(state === "bite"){
-      bobber.x += Math.sin(t/90)*0.7;
-      bobber.y = (waterY + 52) + Math.sin(t/85)*2.7;
+      // Excited bobber movement
+      bobber.x = bobber.targetX + Math.sin(t/80) * 3;
+      bobber.y = bobber.targetY + Math.sin(t/60) * 4;
       if(t >= missAt){
         setState("miss");
         log("❌ Missed it... too slow.");
+        resetBobberToShore();
       }
     }
 
-    if(state === "fight" && hookedFish){
-      const line = getLine();
+    if(state === "fight" && fight.active){
+      const now = performance.now();
+      const dt = (now - (fight.lastUpdate || now)) / 1000;
+      fight.lastUpdate = now;
+      updateFight(Math.min(0.05, dt));
 
-      // fish pull varies
-      fishPull = 0.35 + Math.sin(t/180)*0.20 + Math.random()*0.08;
-
-      const rarPullMul = { common:1.0, uncommon:1.1, rare:1.25, epic:1.5, legendary:1.8 }[hookedFish.rarity] || 1.0;
-      const kgFactor = clamp(hookedFish.kg / 12, 0.15, 2.2);
-      const pull = fishPull * rarPullMul * kgFactor;
-
-      if(holdingReel){
-        tension += 0.010 * pull;
-        fightEndAt -= 7.0;
-      } else {
-        tension -= 0.012;
-      }
-
-      tension += 0.004 * pull;
-      tension = Math.max(0, tension);
-
-      // Snap threshold scales with line strength
-      const safe = 0.80 + (line.strengthKg/20)*0.30; // ~0.86 (4kg) .. ~1.10 (20kg)
-      if(tension > safe){
-        setState("snapped");
-        hookedFish = null;
-        holdingReel = false;
-        log("💥 Line snapped! Buy a stronger line in the Shop.");
-      }
-
-      // win condition
-      if(performance.now() >= fightEndAt && state==="fight"){
-        const fish = hookedFish;
-        hookedFish = null;
-        holdingReel = false;
-
-        const ok = addToKeepnet(fish);
-        if(ok){
-          log(`✅ Landed fish! <b style="color:${rarColor(fish.rarity)}">${fish.name}</b><br>
-               ⚖️ <b>${fmt2(fish.kg)}</b> kg · <b style="color:${rarColor(fish.rarity)}">${fish.rarity}</b>${fish.trophy ? " · <b style='color:#ffcc33'>TROPHY</b>" : ""}<br>
-               🎒 Stored in keepnet. Sell from Inventory anytime.`);
-        }
-        setState("ready");
-        updateHud();
-        saveNum("pf_money", money);
-        saveNum("pf_netcap", keepnetCapKg);
-      }
-
-      // bobber reacts
-      bobber.x += Math.sin(t/70)*0.6;
-      bobber.y = (waterY + 52) + Math.sin(t/60)*2.0 + (holdingReel ? 0.6 : 0);
+      // Update bobber position based on fish
+      const speed = 0.15;
+      bobber.x += (bobber.targetX - bobber.x) * speed;
+      bobber.y += (bobber.targetY - bobber.y) * speed;
     }
 
     if(state === "miss" || state === "snapped"){
-      bobber.y = (waterY + 52) + Math.sin(t/260)*1.1;
+      bobber.y = bobber.targetY + Math.sin(t/260) * 1.1;
     }
   }
 
@@ -863,29 +2113,74 @@
     requestAnimationFrame(loop);
   }
 
-  // ---------- Init ----------
-  function saveAll(){
-    saveNum("pf_money", money);
-    saveNum("pf_netcap", keepnetCapKg);
+  // ---------- Save / Load ALL ----------
+  function loadAll(){
+    const s = loadJSON(SAVE_KEY, null);
+    if(!s) return;
+
+    money = typeof s.money === "number" ? s.money : 0;
+    keepnetCapKg = typeof s.keepnetCapKg === "number" ? s.keepnetCapKg : 15.0;
+    keepnet = Array.isArray(s.keepnet) ? s.keepnet : [];
+
+    equippedRodId   = s.equippedRodId   || equippedRodId;
+    equippedReelId  = s.equippedReelId  || equippedReelId;
+    equippedLineId  = s.equippedLineId  || equippedLineId;
+    equippedFloatId = s.equippedFloatId || equippedFloatId;
+    equippedHookId  = s.equippedHookId  || equippedHookId;
+    equippedBaitId  = s.equippedBaitId  || equippedBaitId;
+
+    floatDepthM = typeof s.floatDepthM === "number" ? s.floatDepthM : floatDepthM;
+    defaultDrag = typeof s.defaultDrag === "number" ? s.defaultDrag : defaultDrag;
+    logbook = s.logbook || logbook;
+    isNight = !!s.isNight;
   }
 
+  function saveAll(){
+    saveJSON(SAVE_KEY, {
+      money,
+      keepnetCapKg,
+      keepnet,
+      equippedRodId,
+      equippedReelId,
+      equippedLineId,
+      equippedFloatId,
+      equippedHookId,
+      equippedBaitId,
+      floatDepthM,
+      defaultDrag,
+      logbook,
+      isNight
+    });
+  }
+
+  // ---------- Init ----------
+  loadAll();
   updateDayBtn();
+
+  // default slider values
+  depthSlider.value = String(floatDepthM);
+  depthTxt.textContent = floatDepthM.toFixed(1);
+  dragSlider.value = String(defaultDrag);
+  dragTxt.textContent = defaultDrag.toFixed(2);
+
+  renderShop();
+  updateSetupPanel(true);
+
   setState("ready");
   updateHud();
-  log("🎣 Tap Cast or tap the water. When you see BITE: Reel/Hook. During Fight: hold Reel and watch tension.");
+  log("🎣 Tap anywhere on water to cast there. During fight: hold Reel + manage DRAG. Press ✂️ to cut line.");
 
   window.addEventListener("beforeunload", saveAll);
+  setInterval(saveAll, 4000);
 
   requestAnimationFrame(loop);
 })();
 </script>
 
-<!-- Register Service Worker (PWA) -->
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
 </script>
-
 </body>
 </html>
