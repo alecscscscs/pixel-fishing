@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Pixel Fishing EU - Mobile</title>
+<style>
+  body{margin:0;background:#0b1320;color:#eaf2ff;font-family:monospace;display:flex;justify-content:center}
+  .wrap{width:min(440px,96vw);padding:10px}
+  canvas{width:100%;height:auto;background:#08101a;border:1px solid #223;border-radius:12px;display:block;touch-action:none}
+  .hud{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:6px 0 8px}
+  .pill{background:#111a28;border:1px solid #233;padding:6px 10px;border-radius:999px;font-size:12px}
+  .row{display:flex;gap:8px;margin-top:8px}
+  button{flex:1;padding:10px;border-radius:12px;border:1px solid #334;background:#132033;color:#eaf2ff;font-size:15px}
+  button:active{transform:scale(.99)}
+  .log{margin-top:8px;min-height:68px;opacity:.95;font-size:13px}
+  .hint{opacity:.75;font-size:12px;margin-top:6px;text-align:center}
+
+  /* Panels */
+  .panel{
+    display:none; position:fixed; left:0; top:0; right:0; bottom:0;
+    background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:14px;
+  }
+  .card{
+    width:min(460px, 96vw); max-height:80vh; overflow:auto;
+    background:#0f1b2a; border:1px solid #2a3a55; border-radius:14px; padding:12px;
+  }
+  .card h3{margin:0 0 8px 0}
+  .card .x{float:right}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .item{background:#0c1624;border:1px solid #22344e;border-radius:12px;padding:10px;font-size:13px}
+  .item b{font-size:14px}
+  .small{opacity:.85;font-size:12px}
+  .bar{
+    height:10px; background:#16263c; border:1px solid #2a3a55; border-radius:999px; overflow:hidden;
+  }
+  .bar > div{height:100%; width:0%;}
+  .split{display:flex;gap:10px;flex-wrap:wrap}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3a55;margin-left:6px;font-size:12px;opacity:.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <div class="pill">💰 <b id="money">0</b> lei</div>
+    <div class="pill">🎣 Stare: <b id="state">gata</b></div>
+    <div class="pill">🎒 Keepnet: <b id="netKg">0.00</b>/<b id="netCap">15.00</b> kg</div>
+  </div>
+
+  <canvas id="c" width="440" height="270"></canvas>
+
+  <div class="row">
+    <button id="castBtn">🎯 Aruncă</button>
+    <button id="reelBtn">🧲 Recuperează</button>
+  </div>
+  <div class="row">
+    <button id="invBtn">🎒 Inventar</button>
+    <button id="shopBtn">🛒 Shop</button>
+    <button id="dayBtn">🌙 Noapte</button>
+  </div>
+
+  <div class="log" id="log"></div>
+  <div class="hint">
+    Tap pe canvas: 1 tap = aruncă · dublu-tap = recuperează · În “Fight” ține apăsat pe Recuperează.
+  </div>
+</div>
+
+<!-- Inventory Panel -->
+<div class="panel" id="invPanel">
+  <div class="card">
+    <button class="x" id="invClose">Închide</button>
+    <h3>🎒 Keepnet (pești păstrați)</h3>
+    <div class="small">Vinzi când vrei. Dacă e plin, trebuie să eliberezi ceva.</div>
+    <div style="margin:10px 0">
+      <div class="bar"><div id="netBar"></div></div>
+      <div class="small" style="margin-top:6px">Total: <b id="netTotalTxt">0.00</b> kg / <b id="netCapTxt">15.00</b> kg</div>
+    </div>
+    <div class="row">
+      <button id="sellAllBtn">💸 Vinde tot</button>
+      <button id="releaseAllBtn">🫧 Eliberează tot</button>
+    </div>
+    <div class="list" id="invList" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- Shop Panel -->
+<div class="panel" id="shopPanel">
+  <div class="card">
+    <button class="x" id="shopClose">Închide</button>
+    <h3>🛒 Shop</h3>
+    <div class="small">Echipamentul influențează: șanse, pești mari, riscul să se rupă firul.</div>
+
+    <div class="item" style="margin-top:10px">
+      <b>Echipat acum</b>
+      <div class="small" id="equippedTxt"></div>
+    </div>
+
+    <h3 style="margin-top:12px">🎣 Undițe</h3>
+    <div class="list" id="rodList"></div>
+
+    <h3 style="margin-top:12px">🧵 Fir</h3>
+    <div class="list" id="lineList"></div>
+
+    <h3 style="margin-top:12px">🪱 Momeli</h3>
+    <div class="list" id="baitList"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+
+  const moneyEl = document.getElementById("money");
+  const stateEl = document.getElementById("state");
+  const logEl = document.getElementById("log");
+  const netKgEl = document.getElementById("netKg");
+  const netCapEl = document.getElementById("netCap");
+
+  const castBtn = document.getElementById("castBtn");
+  const reelBtn = document.getElementById("reelBtn");
+  const invBtn = document.getElementById("invBtn");
+  const shopBtn = document.getElementById("shopBtn");
+  const dayBtn = document.getElementById("dayBtn");
+
+  const invPanel = document.getElementById("invPanel");
+  const invClose = document.getElementById("invClose");
+  const invList = document.getElementById("invList");
+  const sellAllBtn = document.getElementById("sellAllBtn");
+  const releaseAllBtn = document.getElementById("releaseAllBtn");
+  const netBar = document.getElementById("netBar");
+  const netTotalTxt = document.getElementById("netTotalTxt");
+  const netCapTxt = document.getElementById("netCapTxt");
+
+  const shopPanel = document.getElementById("shopPanel");
+  const shopClose = document.getElementById("shopClose");
+  const equippedTxt = document.getElementById("equippedTxt");
+  const rodList = document.getElementById("rodList");
+  const lineList = document.getElementById("lineList");
+  const baitList = document.getElementById("baitList");
+
+  // ---------- Helpers ----------
+  const W = canvas.width, H = canvas.height;
+  const shoreY = 92;
+  const waterY = shoreY + 10;
+
+  const rarColor = (rar) => ({
+    "comun":"#eaf2ff",
+    "uncommon":"#7CFF6B",
+    "rar":"#5aa9ff",
+    "epic":"#b16cff",
+    "legendar":"#ffcc33"
+  }[rar] || "#eaf2ff");
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt2 = (x) => Number(x).toFixed(2);
+
+  function log(html){ logEl.innerHTML = html; }
+
+  function setState(s){
+    state = s;
+    stateEl.textContent = ({
+      ready:"gata",
+      casting:"arunc...",
+      waiting:"aștept...",
+      bite:"MUȘCĂ!",
+      fight:"FIGHT!",
+      miss:"a scăpat",
+      snapped:"fir rupt"
+    }[s] || s);
+  }
+
+  function rand(min, max){ return min + Math.random()*(max-min); }
+
+  // ---------- Game Save ----------
+  function loadNum(k, d){ return Number(localStorage.getItem(k) ?? d); }
+  function saveNum(k, v){ localStorage.setItem(k, String(v)); }
+
+  // ---------- Core economy/inventory ----------
+  let money = loadNum("pf_money", 0);
+
+  const keepnet = []; // {name, rar, kg, value}
+  let keepnetCapKg = loadNum("pf_netcap", 15.0);
+
+  function keepnetTotalKg(){
+    return keepnet.reduce((s,f)=>s+f.kg,0);
+  }
+
+  function updateHud(){
+    moneyEl.textContent = money;
+    const total = keepnetTotalKg();
+    netKgEl.textContent = fmt2(total);
+    netCapEl.textContent = fmt2(keepnetCapKg);
+
+    // inventory bar
+    const pct = clamp((total/keepnetCapKg)*100, 0, 100);
+    netBar.style.width = pct + "%";
+    netBar.style.background = pct < 80 ? "#2ecc71" : (pct < 100 ? "#ffcc33" : "#ff4d6d");
+    netTotalTxt.textContent = fmt2(total);
+    netCapTxt.textContent = fmt2(keepnetCapKg);
+  }
+
+  function addToKeepnet(fish){
+    const total = keepnetTotalKg();
+    if(total + fish.kg > keepnetCapKg + 1e-9){
+      log(`🎒 Keepnet plin! Ai prins <b style="color:${rarColor(fish.rar)}">${fish.name}</b> (${fmt2(fish.kg)} kg) dar <b>nu încape</b>.<br>
+           🫧 Deschide Inventar și eliberează ceva sau fă upgrade la keepnet.`);
+      return false;
+    }
+    keepnet.push(fish);
+    return true;
+  }
+
+  function renderInventory(){
+    invList.innerHTML = "";
+    if(keepnet.length === 0){
+      invList.innerHTML = `<div class="item">Nu ai pești păstrați încă.</div>`;
+      updateHud();
+      return;
+    }
+    keepnet.forEach((f, idx) => {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <b style="color:${rarColor(f.rar)}">${f.name}</b>
+        <span class="tag" style="color:${rarColor(f.rar)}">${f.rar}</span><br>
+        ⚖️ <b>${fmt2(f.kg)}</b> kg · 💰 <b>${f.value}</b> lei
+        <div class="row" style="margin-top:8px">
+          <button data-sell="${idx}">Vinde</button>
+          <button data-rel="${idx}">Eliberează</button>
+        </div>
+      `;
+      invList.appendChild(el);
+    });
+
+    invList.querySelectorAll("button[data-sell]").forEach(btn=>{
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-sell"));
+        const f = keepnet[i];
+        money += f.value;
+        keepnet.splice(i,1);
+        saveNum("pf_money", money);
+        renderInventory();
+        updateHud();
+      });
+    });
+    invList.querySelectorAll("button[data-rel]").forEach(btn=>{
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-rel"));
+        keepnet.splice(i,1);
+        renderInventory();
+        updateHud();
+      });
+    });
+
+    updateHud();
+  }
+
+  sellAllBtn.addEventListener("click", () => {
+    const sum = keepnet.reduce((s,f)=>s+f.value,0);
+    money += sum;
+    keepnet.length = 0;
+    saveNum("pf_money", money);
+    renderInventory();
+    updateHud();
+    log(`💸 Ai vândut tot din keepnet: +<b>${sum}</b> lei.`);
+  });
+
+  releaseAllBtn.addEventListener("click", () => {
+    keepnet.length = 0;
+    renderInventory();
+    updateHud();
+    log(`🫧 Ai eliberat tot din keepnet.`);
+  });
+
+  // ---------- Equipment / Shop ----------
+  const rods = [
+    {id:"rod_basic",  name:"Băț simplu",     price:0,   biteBonus:0.00, bigBonus:0.00},
+    {id:"rod_lake",   name:"Undiță Lac",     price:250, biteBonus:0.08, bigBonus:0.06},
+    {id:"rod_pro",    name:"Undiță Pro",     price:800, biteBonus:0.15, bigBonus:0.12},
+  ];
+  const lines = [
+    {id:"line_4",  name:"Fir 4 kg",  price:0,   strengthKg:4},
+    {id:"line_10", name:"Fir 10 kg", price:220, strengthKg:10},
+    {id:"line_20", name:"Fir 20 kg", price:650, strengthKg:20},
+  ];
+  const baits = [
+    {id:"bait_worm",  name:"Vierme",       price:0,   bias:"peaceful"},
+    {id:"bait_corn",  name:"Porumb",       price:60,  bias:"carp"},
+    {id:"bait_minnow",name:"Peștișor viu", price:140, bias:"predator"},
+  ];
+
+  let equippedRodId  = localStorage.getItem("pf_rod")  || "rod_basic";
+  let equippedLineId = localStorage.getItem("pf_line") || "line_4";
+  let equippedBaitId = localStorage.getItem("pf_bait") || "bait_worm";
+  let isNight = (localStorage.getItem("pf_night") === "1");
+
+  function getRod(){ return rods.find(r=>r.id===equippedRodId) || rods[0]; }
+  function getLine(){ return lines.find(l=>l.id===equippedLineId) || lines[0]; }
+  function getBait(){ return baits.find(b=>b.id===equippedBaitId) || baits[0]; }
+
+  function ownedSetKey(id){ return "pf_owned_" + id; }
+  function isOwned(id){ return localStorage.getItem(ownedSetKey(id)) === "1" || priceOf(id) === 0; }
+  function setOwned(id){ localStorage.setItem(ownedSetKey(id), "1"); }
+
+  function priceOf(id){
+    const all = [...rods, ...lines, ...baits];
+    const it = all.find(x=>x.id===id);
+    return it ? it.price : 0;
+  }
+
+  function equip(id){
+    if(id.startsWith("rod_")) equippedRodId = id, localStorage.setItem("pf_rod", id);
+    if(id.startsWith("line_")) equippedLineId = id, localStorage.setItem("pf_line", id);
+    if(id.startsWith("bait_")) equippedBaitId = id, localStorage.setItem("pf_bait", id);
+  }
+
+  function buy(id){
+    const p = priceOf(id);
+    if(isOwned(id)) return true;
+    if(money < p){
+      log(`❌ Nu ai destui bani. Îți trebuie <b>${p}</b> lei.`);
+      return false;
+    }
+    money -= p;
+    saveNum("pf_money", money);
+    setOwned(id);
+    return true;
+  }
+
+  function renderShop(){
+    const rod = getRod(), line = getLine(), bait = getBait();
+    equippedTxt.innerHTML = `
+      🎣 <b>${rod.name}</b> (bite +${Math.round(rod.biteBonus*100)}%, big +${Math.round(rod.bigBonus*100)}%)<br>
+      🧵 <b>${line.name}</b> (rezistență <b>${line.strengthKg} kg</b>)<br>
+      🪱 <b>${bait.name}</b>
+    `;
+
+    function itemHtml(obj, extra){
+      const owned = isOwned(obj.id);
+      const eq = (obj.id===equippedRodId || obj.id===equippedLineId || obj.id===equippedBaitId);
+      const btnText = eq ? "Echipat" : (owned ? "Echipează" : `Cumpără (${obj.price} lei)`);
+      return `
+        <div class="item">
+          <b>${obj.name}</b>
+          <div class="small">${extra}</div>
+          <div class="row" style="margin-top:8px">
+            <button data-id="${obj.id}" ${eq ? "disabled" : ""}>${btnText}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    rodList.innerHTML = rods.map(r => itemHtml(r, `Bite bonus: ${Math.round(r.biteBonus*100)}% · Șansă pești mari: ${Math.round(r.bigBonus*100)}%`)).join("");
+    lineList.innerHTML = lines.map(l => itemHtml(l, `Rezistență fir: <b>${l.strengthKg} kg</b> (pești mari pot rupe firul)`)).join("");
+    baitList.innerHTML = baits.map(b => itemHtml(b, `Atrage: ${
+      b.bias==="peaceful" ? "pești pașnici (plătică/caraș)" :
+      b.bias==="carp" ? "crap/caraș mai des" : "răpitori (știucă/șalău/somn)"
+    }`)).join("");
+
+    shopPanel.querySelectorAll("button[data-id]").forEach(btn=>{
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        if(isOwned(id)){
+          equip(id);
+          renderShop();
+          log(`✅ Ai echipat: <b>${(rods.concat(lines,baits).find(x=>x.id===id)?.name)||id}</b>.`);
+          updateHud();
+        }else{
+          if(buy(id)){
+            equip(id);
+            renderShop();
+            log(`🛒 Cumpărat și echipat: <b>${(rods.concat(lines,baits).find(x=>x.id===id)?.name)||id}</b>.`);
+            updateHud();
+          }
+        }
+      });
+    });
+
+    updateHud();
+  }
+
+  // ---------- Fish database + logic (rarities, bait influence, night influence) ----------
+  // rarities: comun, uncommon, rar, epic, legendar
+  const fishDB = [
+    {name:"Caraș",   baseMin:0.30, baseMax:1.50, priceKg: 8,  group:"peaceful"},
+    {name:"Plătică", baseMin:0.50, baseMax:3.00, priceKg:10,  group:"peaceful"},
+    {name:"Clean",   baseMin:0.40, baseMax:2.20, priceKg:11,  group:"peaceful"},
+    {name:"Crap",    baseMin:1.00, baseMax:20.0, priceKg:12,  group:"carp"},
+    {name:"Păstrăv", baseMin:0.50, baseMax:6.00, priceKg:22,  group:"river"},
+    {name:"Șalău",   baseMin:1.00, baseMax:15.0, priceKg:20,  group:"predator"},
+    {name:"Somn",    baseMin:5.00, baseMax:80.0, priceKg:30,  group:"predator"},
+  ];
+
+  function rarityRoll(){
+    // bază; noaptea crește un pic rar/epic (feel good)
+    let r = Math.random()*100;
+    const nightBoost = isNight ? 1.10 : 1.0;
+    // comun 72, uncommon 18, rar 8, epic 1.7, legendar 0.3 (aprox)
+    if(r < 0.30*nightBoost) return "legendar";
+    if(r < (0.30*nightBoost) + 1.70*nightBoost) return "epic";
+    if(r < (0.30+1.70)*nightBoost + 8.0*nightBoost) return "rar";
+    if(r < (0.30+1.70+8.0)*nightBoost + 18.0) return "uncommon";
+    return "comun";
+  }
+
+  function pickSpecies(){
+    const bait = getBait();
+    const rod = getRod();
+
+    // weights per group
+    let weights = fishDB.map(f => {
+      let w = 1;
+      // bait bias
+      if(bait.bias==="peaceful") w *= (f.group==="peaceful" ? 2.2 : (f.group==="predator" ? 0.6 : 1));
+      if(bait.bias==="carp")     w *= (f.group==="carp" ? 2.4 : (f.group==="peaceful" ? 1.2 : 0.7));
+      if(bait.bias==="predator") w *= (f.group==="predator" ? 2.6 : 0.6);
+
+      // night bias (somnul & rapitorii mai activi)
+      if(isNight && f.name==="Somn") w *= 1.7;
+      if(isNight && f.group==="predator") w *= 1.2;
+
+      // rod helps a bit overall bite to bigger fish; here we bias slightly toward higher max species
+      w *= (1 + rod.bigBonus * (f.baseMax / 20)); // somn/crap get more
+
+      return w;
+    });
+
+    const sum = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random()*sum, acc=0;
+    for(let i=0;i<fishDB.length;i++){
+      acc += weights[i];
+      if(r <= acc) return fishDB[i];
+    }
+    return fishDB[0];
+  }
+
+  function generateFish(){
+    const species = pickSpecies();
+    const rar = rarityRoll();
+    const rod = getRod();
+
+    // weight roll with rarity multiplier & rod bigBonus
+    const min = species.baseMin;
+    const max = species.baseMax;
+    let w = rand(min, max);
+
+    const rarMul = {
+      comun: 1.00,
+      uncommon: 1.10,
+      rar: 1.25,
+      epic: 1.55,
+      legendar: 1.90
+    }[rar] || 1;
+
+    // push toward upper weights based on rod bigBonus
+    const bigPush = 1 + rod.bigBonus * 0.9;
+    w = Math.min(max, w * rarMul * bigPush);
+
+    // trophy definition: top ~12% of max (simple)
+    const trophy = (w >= max * 0.88);
+
+    // value
+    const baseVal = w * species.priceKg;
+    const rarValMul = {
+      comun:1.0, uncommon:1.15, rar:1.4, epic:2.0, legendar:3.0
+    }[rar] || 1.0;
+
+    const value = Math.max(1, Math.floor(baseVal * rarValMul));
+
+    return { name: species.name, rar, kg: w, value, trophy };
+  }
+
+  // ---------- Fishing scene + animation ----------
+  const fisher = { x: 86, y: shoreY-18 };
+
+  const bobber = { x: fisher.x+22, y: fisher.y+14, vx:0, vy:0, inWater:false };
+
+  let state = "ready";
+  let biteAt = 0, missAt = 0;
+
+  // Fight minigame
+  let hookedFish = null;
+  let tension = 0;           // 0..1+
+  let fishPull = 0;          // current pull strength
+  let holdingReel = false;   // user holding button
+  let fightEndAt = 0;
+
+  function startCasting(){
+    if(state !== "ready") return;
+
+    setState("casting");
+    log("🎯 Ai aruncat undița...");
+
+    // target
+    const targetX = 260 + Math.random()*150;
+    const targetY = waterY + 65 + Math.random()*80;
+
+    bobber.x = fisher.x + 22;
+    bobber.y = fisher.y + 14;
+    bobber.vx = (targetX - bobber.x)/18;
+    bobber.vy = (targetY - bobber.y)/18;
+    bobber.inWater = false;
+
+    const now = performance.now();
+    // bite chance influenced by rod biteBonus + night (slightly)
+    const rod = getRod();
+    const baseWait = 900 + Math.random()*1600; // 0.9 - 2.5s
+    const speedFactor = 1 - (rod.biteBonus + (isNight ? 0.04 : 0)); // lower = faster
+    biteAt = now + baseWait * clamp(speedFactor, 0.75, 1.05);
+    missAt = biteAt + 1600; // window
+  }
+
+  function startFight(fish){
+    hookedFish = fish;
+    setState("fight");
+    tension = 0.15;
+    fishPull = 0.0;
+    holdingReel = false;
+    fightEndAt = performance.now() + (1100 + fish.kg*30); // bigger fish takes longer
+    log(`🎣 Ai înțepat! <b style="color:${rarColor(fish.rar)}">${fish.name}</b> (${fmt2(fish.kg)} kg, ${fish.rar}${fish.trophy ? " · 🏆 Trophy" : ""})<br>
+         Ține apăsat pe <b>Recuperează</b>, dar ai grijă la tensiune!`);
+  }
+
+  function onReelTap(){
+    if(state==="casting") return;
+
+    if(state==="waiting"){
+      log("🫧 Ai recuperat prea devreme... nimic.");
+      setState("ready");
+      return;
+    }
+
+    if(state==="bite"){
+      // hook and start fight
+      const fish = generateFish();
+      startFight(fish);
+      return;
+    }
+
+    if(state==="miss" || state==="snapped"){
+      log("🎣 Încearcă din nou.");
+      setState("ready");
+      return;
+    }
+
+    if(state==="fight"){
+      // short tap does nothing (hold matters)
+      return;
+    }
+  }
+
+  // Hold-to-reel (mobile friendly)
+  reelBtn.addEventListener("pointerdown", (e) => { holdingReel = true; e.preventDefault(); });
+  reelBtn.addEventListener("pointerup",   (e) => { holdingReel = false; e.preventDefault(); });
+  reelBtn.addEventListener("pointercancel",(e)=>{ holdingReel = false; e.preventDefault(); });
+  reelBtn.addEventListener("click", onReelTap);
+
+  castBtn.addEventListener("click", startCasting);
+
+  // Canvas tap / double-tap
+  let lastTap = 0;
+  canvas.addEventListener("pointerdown", () => {
+    const now = Date.now();
+    if(now - lastTap < 300) onReelTap();
+    else startCasting();
+    lastTap = now;
+  });
+
+  // Panels
+  invBtn.addEventListener("click", () => { invPanel.style.display="flex"; renderInventory(); });
+  invClose.addEventListener("click", () => { invPanel.style.display="none"; });
+  shopBtn.addEventListener("click", () => { shopPanel.style.display="flex"; renderShop(); });
+  shopClose.addEventListener("click", () => { shopPanel.style.display="none"; });
+
+  // Day/Night toggle
+  function updateDayBtn(){
+    dayBtn.textContent = isNight ? "☀️ Zi" : "🌙 Noapte";
+  }
+  dayBtn.addEventListener("click", () => {
+    isNight = !isNight;
+    localStorage.setItem("pf_night", isNight ? "1":"0");
+    updateDayBtn();
+    log(isNight ? "🌙 E noapte. Răpitorii sunt mai activi." : "☀️ E zi. Peștii comuni sunt mai constanți.");
+  });
+
+  // ---------- Drawing ----------
+  function drawPixelRect(x,y,w,h,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  }
+
+  function drawHudFight(){
+    const line = getLine();
+    // meter area
+    const x = 12, y = 12, w = W-24, h = 14;
+
+    // background
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(x-4, y-6, w+8, 42);
+
+    // label
+    ctx.fillStyle = "#eaf2ff";
+    ctx.font = "12px monospace";
+    const maxT = line.strengthKg; // display as strength
+    ctx.fillText(`Tensiune (fir ${maxT}kg)`, x, y-1);
+
+    // bar bg
+    ctx.fillStyle = "#16263c";
+    ctx.fillRect(x, y+6, w, h);
+    ctx.strokeStyle = "#2a3a55";
+    ctx.strokeRect(x, y+6, w, h);
+
+    // compute tension pct vs safe zone
+    // We interpret tension 0..1 as 0..100%. Snap above 1.
+    const pct = clamp(tension, 0, 1.1);
+    const fillW = (pct/1.0) * w;
+
+    // color changes
+    let col = "#2ecc71";
+    if(pct > 0.75) col = "#ffcc33";
+    if(pct > 0.95) col = "#ff4d6d";
+
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y+6, Math.min(fillW, w), h);
+
+    // target progress (time to land fish)
+    const prog = clamp(1 - (fightEndAt - performance.now()) / (hookedFish ? (1100 + hookedFish.kg*30) : 1), 0, 1);
+    ctx.fillStyle = "#eaf2ff";
+    ctx.fillText(`Progres: ${Math.round(prog*100)}%`, x, y+36);
+  }
+
+  function drawScene(t){
+    // sky
+    drawPixelRect(0,0,W,H, isNight ? "#061022" : "#08101a");
+    // far mountains
+    drawPixelRect(0,32,W,60, isNight ? "#07152c" : "#0d1b2a");
+
+    // stars (night)
+    if(isNight){
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      for(let i=0;i<35;i++){
+        const sx = (i*73 + 19) % W;
+        const sy = (i*29 + 11) % 70;
+        ctx.fillRect(sx, sy, 1, 1);
+      }
+    }
+
+    // shore
+    drawPixelRect(0,shoreY-18,W,18, isNight ? "#24211d" : "#2d2a24");
+    drawPixelRect(0,shoreY-10,W,10, isNight ? "#2f2a24" : "#3a342d");
+
+    // water
+    drawPixelRect(0,waterY,W,H-waterY, isNight ? "#06747a" : "#0a9396");
+
+    // waves
+    for(let i=0;i<10;i++){
+      const y = waterY + 10 + i*14 + (Math.sin(t/700 + i)*2);
+      drawPixelRect(0,y,W,2,"rgba(148,210,189,0.30)");
+    }
+
+    // fisher sprite
+    drawPixelRect(fisher.x, fisher.y, 8, 14, "#c27c5a");
+    drawPixelRect(fisher.x+2, fisher.y-6, 6, 6, "#f1c27d");
+    drawPixelRect(fisher.x+1, fisher.y-8, 8, 3, "#223");
+    drawPixelRect(fisher.x-2, fisher.y+10, 5, 8, "#111");
+    drawPixelRect(fisher.x+5, fisher.y+10, 5, 8, "#111");
+
+    // rod
+    ctx.strokeStyle = "#c9a227";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(fisher.x+7, fisher.y+3);
+    ctx.lineTo(fisher.x+44, fisher.y-12);
+    ctx.stroke();
+
+    // line
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(fisher.x+44, fisher.y-12);
+    ctx.lineTo(bobber.x, bobber.y);
+    ctx.stroke();
+
+    // bobber
+    drawPixelRect(bobber.x-3, bobber.y-3, 6, 6, "#ff4d6d");
+    drawPixelRect(bobber.x-2, bobber.y-6, 4, 3, "#fff");
+
+    // bite overlay
+    if(state === "bite"){
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = "#ffcc33";
+      ctx.font = "bold 26px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("MUȘCĂ! Dublu-tap / Recuperează!", W/2, H/2);
+      ctx.textAlign = "start";
+    }
+
+    // fight HUD
+    if(state === "fight" && hookedFish){
+      drawHudFight();
+      // show fish info top
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(12, H-44, W-24, 32);
+      ctx.fillStyle = rarColor(hookedFish.rar);
+      ctx.font = "12px monospace";
+      ctx.fillText(`Pește: ${hookedFish.name} · ${fmt2(hookedFish.kg)} kg · ${hookedFish.rar}${hookedFish.trophy ? " · 🏆" : ""}`, 18, H-24);
+      ctx.fillStyle = "#eaf2ff";
+      ctx.fillText(holdingReel ? "Recuperezi..." : "Ține apăsat pe Recuperează", 18, H-10);
+    }
+  }
+
+  // ---------- Update loop ----------
+  function update(t){
+    // casting
+    if(state === "casting"){
+      bobber.x += bobber.vx;
+      bobber.y += bobber.vy;
+      if(bobber.y >= waterY + 52){
+        bobber.y = waterY + 52;
+        bobber.vx = 0; bobber.vy = 0;
+        bobber.inWater = true;
+        setState("waiting");
+      }
+    }
+
+    if(state === "waiting"){
+      bobber.y = (waterY + 52) + Math.sin(t/260)*1.2;
+
+      if(t >= biteAt){
+        setState("bite");
+        log("‼️ MUȘCĂ! Apasă Recuperează (sau dublu-tap) ca să înțepi.");
+      }
+    }
+
+    if(state === "bite"){
+      bobber.x += Math.sin(t/90)*0.7;
+      bobber.y = (waterY + 52) + Math.sin(t/85)*2.7;
+
+      if(t >= missAt){
+        setState("miss");
+        log("❌ A scăpat... ai reacționat prea târziu.");
+      }
+    }
+
+    if(state === "fight" && hookedFish){
+      const line = getLine();
+
+      // fish pull varies
+      fishPull = 0.35 + Math.sin(t/180)*0.20 + Math.random()*0.08;
+      // base pull depends on fish kg & rarity
+      const rarPullMul = { comun:1.0, uncommon:1.1, rar:1.25, epic:1.5, legendar:1.8 }[hookedFish.rar] || 1.0;
+      const kgFactor = clamp(hookedFish.kg / 12, 0.15, 2.2);
+      const pull = fishPull * rarPullMul * kgFactor;
+
+      // tension mechanics
+      // if holding reel => tension increases but progress increases
+      // if not holding => tension slowly decreases
+      if(holdingReel){
+        tension += 0.010 * pull;
+        // small progress acceleration: shorten fightEndAt
+        fightEndAt -= 7.0; // reeling makes fight end sooner
+      } else {
+        tension -= 0.012; // relax
+      }
+
+      // fish adds spikes
+      tension += 0.004 * pull;
+
+      tension = Math.max(0, tension);
+
+      // snap check: map line strength to max safe tension
+      // stronger line allows higher tension before snapping
+      const safe = 0.80 + (line.strengthKg/20)*0.30; // ~0.86 (4kg) .. ~1.10 (20kg)
+      if(tension > safe){
+        setState("snapped");
+        hookedFish = null;
+        holdingReel = false;
+        log("💥 Fir rupt! Ia un fir mai rezistent din shop.");
+      }
+
+      // win condition: time elapsed
+      if(performance.now() >= fightEndAt && state==="fight"){
+        // land fish
+        const fish = hookedFish;
+        hookedFish = null;
+        holdingReel = false;
+
+        const ok = addToKeepnet(fish);
+        if(ok){
+          log(`✅ Ai scos peștele! <b style="color:${rarColor(fish.rar)}">${fish.name}</b><br>
+               ⚖️ <b>${fmt2(fish.kg)}</b> kg · ⭐ <b style="color:${rarColor(fish.rar)}">${fish.rar}</b>${fish.trophy ? " · 🏆 Trophy" : ""}<br>
+               🎒 A intrat în keepnet. Vinde din Inventar când vrei.`);
+        }
+        setState("ready");
+        updateHud();
+        saveNum("pf_money", money);
+      }
+
+      // bobber reacts
+      bobber.x += Math.sin(t/70)*0.6;
+      bobber.y = (waterY + 52) + Math.sin(t/60)*2.0 + (holdingReel ? 0.6 : 0);
+    }
+
+    if(state === "miss" || state === "snapped"){
+      // idle bobber on water (or bring it back visually)
+      bobber.y = (waterY + 52) + Math.sin(t/260)*1.1;
+    }
+  }
+
+  function loop(t){
+    update(t);
+    drawScene(t);
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- UI init ----------
+  function initOwned(){
+    // mark free items as owned
+    rods.forEach(r=>{ if(r.price===0) setOwned(r.id); });
+    lines.forEach(l=>{ if(l.price===0) setOwned(l.id); });
+    baits.forEach(b=>{ if(b.price===0) setOwned(b.id); });
+  }
+
+  // Basic autosave money
+  function save(){
+    saveNum("pf_money", money);
+    saveNum("pf_netcap", keepnetCapKg);
+  }
+
+  // Prevent double-tap zoom iOS
+  let lastTouchEnd = 0;
+  document.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if(now - lastTouchEnd <= 300) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive:false });
+
+  // start
+  initOwned();
+  updateDayBtn();
+  moneyEl.textContent = money;
+  updateHud();
+  setState("ready");
+  log("🎣 Apasă Aruncă sau tap pe apă. Când mușcă: Recuperează. La pești mari: ține apăsat pe Recuperează.");
+
+  window.addEventListener("beforeunload", save);
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
