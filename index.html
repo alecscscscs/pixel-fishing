@@ -47,9 +47,14 @@
   input[type="range"]{width:100%}
   select{width:100%;padding:8px;border-radius:10px;background:#0c1624;color:#eaf2ff;border:1px solid #22344e}
   
-  /* New style for fight controls */
   .fight-controls{display:none; margin-top:8px;}
   .casting-target{position:absolute;width:12px;height:12px;background:#ffcc33;border-radius:50%;border:2px solid #fff;pointer-events:none;display:none;}
+  
+  /* Weather indicator */
+  .weather{position:absolute;top:10px;left:10px;font-size:12px;padding:4px 8px;background:rgba(0,0,0,0.5);border-radius:12px;}
+  
+  /* Achievements */
+  .achievement{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f1b2a;border:2px solid #ffcc33;border-radius:12px;padding:10px;display:none;z-index:1000;min-width:300px;}
 </style>
 </head>
 
@@ -57,13 +62,13 @@
 <div class="wrap">
   <div class="hud">
     <div class="pill">💰 <b id="money">0</b> coins</div>
-    <div class="pill">🎣 Status: <b id="state">ready</b></div>
-    <div class="pill">🎒 Keepnet: <b id="netKg">0.00</b>/<b id="netCap">15.00</b> kg</div>
+    <div class="pill">🎣 <b id="state">ready</b></div>
+    <div class="pill">🎒 <b id="netKg">0.00</b>/<b id="netCap">15.00</b> kg</div>
+    <div class="pill" id="weatherPill">🌤️ Sunny</div>
   </div>
 
   <canvas id="c" width="460" height="290"></canvas>
   
-  <!-- Casting target indicator -->
   <div class="casting-target" id="castingTarget"></div>
 
   <div class="row">
@@ -71,7 +76,6 @@
     <button id="reelBtn">🧲 Reel / Hook</button>
   </div>
   
-  <!-- Fight controls -->
   <div class="row fight-controls" id="fightControls">
     <button id="cutLineBtn">✂️ Cut line (release fish)</button>
   </div>
@@ -81,7 +85,7 @@
     <button id="invBtn">🎒 Inventory</button>
     <button id="logBtn">📘 Logbook</button>
     <button id="shopBtn">🛒 Shop</button>
-    <button id="dayBtn">🌙 Night</button>
+    <button id="weatherBtn">🌦️ Change Weather (50 coins)</button>
   </div>
 
   <div class="log" id="log"></div>
@@ -216,18 +220,33 @@
   </div>
 </div>
 
+<!-- Achievements Panel -->
+<div class="achievement" id="achievementPopup">
+  <div style="display:flex;gap:10px;align-items:center">
+    <div style="font-size:24px">🏆</div>
+    <div>
+      <b id="achievementTitle">Achievement Unlocked!</b>
+      <div class="small" id="achievementDesc"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   // ---------- DOM ----------
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
   const castingTarget = document.getElementById("castingTarget");
+  const achievementPopup = document.getElementById("achievementPopup");
+  const achievementTitle = document.getElementById("achievementTitle");
+  const achievementDesc = document.getElementById("achievementDesc");
 
   const moneyEl = document.getElementById("money");
   const stateEl = document.getElementById("state");
   const logEl = document.getElementById("log");
   const netKgEl = document.getElementById("netKg");
   const netCapEl = document.getElementById("netCap");
+  const weatherPill = document.getElementById("weatherPill");
 
   const castBtn = document.getElementById("castBtn");
   const reelBtn = document.getElementById("reelBtn");
@@ -235,7 +254,7 @@
   const invBtn = document.getElementById("invBtn");
   const logBtn = document.getElementById("logBtn");
   const shopBtn = document.getElementById("shopBtn");
-  const dayBtn = document.getElementById("dayBtn");
+  const weatherBtn = document.getElementById("weatherBtn");
   const cutLineBtn = document.getElementById("cutLineBtn");
   const fightControls = document.getElementById("fightControls");
 
@@ -301,14 +320,65 @@
 
   function log(html){ logEl.innerHTML = html; }
 
+  function showAchievement(title, description){
+    achievementTitle.textContent = title;
+    achievementDesc.textContent = description;
+    achievementPopup.style.display = 'block';
+    setTimeout(() => {
+      achievementPopup.style.display = 'none';
+    }, 3000);
+  }
+
   // ---------- Save / Load ----------
-  const SAVE_KEY = "pf_save_v3";
+  const SAVE_KEY = "pf_save_v4";
   function saveJSON(k, obj){ localStorage.setItem(k, JSON.stringify(obj)); }
   function loadJSON(k, dflt){
     const raw = localStorage.getItem(k);
     if(!raw) return dflt;
     try { return JSON.parse(raw); } catch { return dflt; }
   }
+
+  // ---------- Weather System ----------
+  const weatherTypes = [
+    {id:"sunny", name:"Sunny", icon:"🌤️", biteMultiplier:1.0, rarityMultiplier:1.0, special:"All fish normal"},
+    {id:"rainy", name:"Rainy", icon:"🌧️", biteMultiplier:1.3, rarityMultiplier:1.1, special:"Predators more active"},
+    {id:"foggy", name:"Foggy", icon:"🌫️", biteMultiplier:0.8, rarityMultiplier:1.2, special:"Rare fish chance up"},
+    {id:"stormy", name:"Stormy", icon:"⛈️", biteMultiplier:0.6, rarityMultiplier:1.5, special:"Legendary chance up"},
+    {id:"cloudy", name:"Cloudy", icon:"☁️", biteMultiplier:1.1, rarityMultiplier:1.0, special:"Carp more active"}
+  ];
+
+  let currentWeather = "sunny";
+  
+  function changeWeather(){
+    if(money < 50){
+      log("❌ Need 50 coins to change weather.");
+      return;
+    }
+    
+    money -= 50;
+    saveAll();
+    
+    // Random new weather (not same as current)
+    let newWeather;
+    do {
+      newWeather = weatherTypes[Math.floor(Math.random() * weatherTypes.length)].id;
+    } while(newWeather === currentWeather);
+    
+    currentWeather = newWeather;
+    updateWeatherDisplay();
+    log(`🌦️ Weather changed to ${getWeather().name}! ${getWeather().special}`);
+  }
+
+  function getWeather(){
+    return weatherTypes.find(w => w.id === currentWeather) || weatherTypes[0];
+  }
+
+  function updateWeatherDisplay(){
+    const w = getWeather();
+    weatherPill.innerHTML = `${w.icon} ${w.name}`;
+  }
+
+  weatherBtn.addEventListener("click", changeWeather);
 
   // ---------- Economy / keepnet ----------
   let money = 0;
@@ -319,10 +389,41 @@
   let logbook = {
     totalCaught: 0,
     totalKgCaught: 0,
-    species: {}
+    species: {},
+    achievements: []
   };
 
   const rarityRank = { common:1, uncommon:2, rare:3, epic:4, legendary:5 };
+
+  // ---------- Achievements System ----------
+  const achievements = [
+    {id:"first_catch", title:"First Catch!", description:"Catch your first fish", condition:(stats)=>stats.totalCaught >= 1, reward:50},
+    {id:"big_5kg", title:"Big One!", description:"Catch a fish over 5kg", condition:(stats,f)=>f && f.kg >= 5, reward:100},
+    {id:"trophy", title:"Trophy Hunter", description:"Catch a trophy fish", condition:(stats,f)=>f && f.trophy, reward:150},
+    {id:"legendary", title:"Legendary!", description:"Catch a legendary fish", condition:(stats,f)=>f && f.rarity === "legendary", reward:300},
+    {id:"net_full", title:"Packed!", description:"Fill your keepnet to 80% capacity", condition:(stats)=>keepnetTotalKg() >= keepnetCapKg * 0.8, reward:80},
+    {id:"species_5", title:"Collector", description:"Catch 5 different species", condition:(stats)=>Object.keys(stats.species).length >= 5, reward:200},
+    {id:"all_gear", title:"Gear Master", description:"Own all fishing gear", condition:(stats)=>checkAllGearOwned(), reward:500},
+    {id:"rich", title:"Rich Fisher", description:"Have 1000 coins", condition:(stats)=>money >= 1000, reward:100}
+  ];
+
+  function checkAllGearOwned(){
+    const allGear = [...rods, ...reels, ...lines, ...floats, ...hooks, ...baits];
+    return allGear.every(g => isOwned(g.id));
+  }
+
+  function checkAchievements(fish=null){
+    achievements.forEach(ach => {
+      if(!logbook.achievements.includes(ach.id)){
+        if(ach.condition(logbook, fish)){
+          logbook.achievements.push(ach.id);
+          money += ach.reward;
+          showAchievement(ach.title, `${ach.description} +${ach.reward} coins!`);
+          saveAll();
+        }
+      }
+    });
+  }
 
   function keepnetTotalKg(){
     return keepnet.reduce((s,f)=>s+f.kg,0);
@@ -350,11 +451,26 @@
       return false;
     }
     keepnet.push(fish);
+    
+    // Bonus for trophy fish
+    if(fish.trophy){
+      const bonus = Math.floor(fish.value * 0.25);
+      money += bonus;
+      log(`🏆 <b>TROPHY BONUS!</b> +${bonus} coins for catching a trophy ${fish.name}!`);
+    }
+    
+    // Bonus for legendary fish
+    if(fish.rarity === "legendary"){
+      const bonus = Math.floor(fish.value * 0.5);
+      money += bonus;
+      log(`👑 <b>LEGENDARY BONUS!</b> +${bonus} coins for catching a legendary fish!`);
+    }
+    
     saveAll();
     return true;
   }
 
-  // ---------- IMPROVED Fish sprites ----------
+  // ---------- Improved Fish sprites ----------
   const spriteCache = new Map();
 
   function drawFishBody(g, bodyPoints, colorTop, colorBottom) {
@@ -634,94 +750,6 @@
     g.fillRect(10, 5, 1, 1);
   }
 
-  function drawZander(g) {
-    const body = [
-      [0,0,0,0,0,0,1,1,0,0,0,0],
-      [0,0,0,0,0,1,1,1,1,0,0,0],
-      [0,0,0,0,1,1,2,2,1,1,0,0],
-      [0,0,0,1,1,2,2,2,2,1,1,0],
-      [0,0,1,1,2,2,2,2,2,2,1,1],
-      [0,1,1,2,2,2,2,2,2,2,2,1],
-      [0,1,1,2,2,2,2,2,2,2,2,1],
-      [0,0,1,1,2,2,2,2,2,2,1,1],
-      [0,0,0,1,1,2,2,2,2,1,1,0],
-      [0,0,0,0,1,1,2,2,1,1,0,0],
-      [0,0,0,0,0,1,1,1,1,0,0,0],
-      [0,0,0,0,0,0,1,1,0,0,0,0]
-    ];
-    drawFishBody(g, body, "#b0b8c0", "#808890");
-    
-    // Pointed head
-    g.fillStyle = "#b0b8c0";
-    g.fillRect(10, 5, 3, 2);
-    g.fillRect(11, 4, 2, 4);
-    
-    // Dorsal fins (spiny and soft)
-    g.fillStyle = "#606870";
-    // First dorsal
-    for(let i = 2; i < 5; i++) {
-      g.fillRect(4, i, 1, 1);
-    }
-    // Second dorsal
-    for(let i = 7; i < 9; i++) {
-      g.fillRect(7, i, 1, 1);
-    }
-    
-    // Tail (slightly forked)
-    g.fillStyle = "#b0b8c0";
-    g.fillRect(0, 4, 2, 1);
-    g.fillRect(0, 5, 3, 2);
-    g.fillRect(0, 7, 2, 1);
-    
-    // Eye (large)
-    g.fillStyle = "#ffffff";
-    g.fillRect(9, 5, 2, 2);
-    g.fillStyle = "#000000";
-    g.fillRect(10, 6, 1, 1);
-  }
-
-  function drawChub(g) {
-    const body = [
-      [0,0,0,0,0,1,1,0,0,0,0,0],
-      [0,0,0,0,1,1,1,1,0,0,0,0],
-      [0,0,0,1,1,2,2,1,1,0,0,0],
-      [0,0,1,1,2,2,2,2,1,1,0,0],
-      [0,1,1,2,2,2,2,2,2,1,1,0],
-      [1,1,2,2,2,2,2,2,2,2,1,1],
-      [1,1,2,2,2,2,2,2,2,2,1,1],
-      [0,1,1,2,2,2,2,2,2,1,1,0],
-      [0,0,1,1,2,2,2,2,1,1,0,0],
-      [0,0,0,1,1,2,2,1,1,0,0,0],
-      [0,0,0,0,1,1,1,1,0,0,0,0],
-      [0,0,0,0,0,1,1,0,0,0,0,0]
-    ];
-    drawFishBody(g, body, "#c0b090", "#907860");
-    
-    // Tail
-    g.fillStyle = "#c0b090";
-    g.fillRect(0, 5, 3, 2);
-    
-    // Dorsal fin
-    g.fillStyle = "#806050";
-    g.fillRect(5, 2, 2, 3);
-    
-    // Anal fin
-    g.fillStyle = "#806050";
-    g.fillRect(5, 8, 2, 3);
-    
-    // Eye
-    g.fillStyle = "#ffffff";
-    g.fillRect(9, 5, 2, 2);
-    g.fillStyle = "#000000";
-    g.fillRect(10, 6, 1, 1);
-    
-    // Dark lateral line
-    g.fillStyle = "#604830";
-    for(let i = 4; i < 9; i++) {
-      g.fillRect(i, 6, 1, 1);
-    }
-  }
-
   function getFishSpriteCanvas(name){
     if(spriteCache.has(name)) return spriteCache.get(name);
     
@@ -754,10 +782,10 @@
         drawCatfish(g);
         break;
       case "Zander":
-        drawZander(g);
+        drawBream(g); // Using Bream sprite for Zander
         break;
       case "Chub":
-        drawChub(g);
+        drawCrucianCarp(g); // Using Crucian Carp sprite for Chub
         break;
       default:
         drawCrucianCarp(g);
@@ -850,6 +878,7 @@
     if(f.trophy) s.trophies += 1;
 
     saveAll();
+    checkAchievements(f);
   }
 
   function renderLogbook(){
@@ -860,7 +889,8 @@
     logSummary.innerHTML = `
       Total fish caught: <b>${logbook.totalCaught}</b><br>
       Total kg caught: <b>${fmt2(logbook.totalKgCaught)}</b> kg<br>
-      Species discovered: <b>${entries.length}</b>
+      Species discovered: <b>${entries.length}</b><br>
+      Achievements unlocked: <b>${logbook.achievements.length}</b>/<b>${achievements.length}</b>
     `;
 
     logList.innerHTML = "";
@@ -950,6 +980,8 @@
     {id:"bait_worm",   name:"Worm",        price:0,   bias:"peaceful"},
     {id:"bait_corn",   name:"Corn",        price:60,  bias:"carp"},
     {id:"bait_minnow", name:"Live Minnow", price:140, bias:"predator"},
+    {id:"bait_bread",  name:"Bread",       price:40,  bias:"peaceful", bonus:0.1},
+    {id:"bait_frog",   name:"Frog",        price:200, bias:"predator", bonus:0.2},
   ];
 
   const keepnetUpgrades = [
@@ -971,7 +1003,6 @@
   // Rig params
   let floatDepthM = 2.0;
   let defaultDrag = 0.55;
-  let isNight = false;
 
   function getRod(){ return rods.find(r=>r.id===equippedRodId) || rods[0]; }
   function getReel(){ return reels.find(r=>r.id===equippedReelId) || reels[0]; }
@@ -1000,6 +1031,7 @@
     money -= p;
     setOwned(id);
     saveAll();
+    checkAchievements();
     return true;
   }
 
@@ -1025,6 +1057,7 @@
     updateHud();
     renderShop();
     log(`✅ Keepnet upgraded to <b>${newCap} kg</b>.`);
+    checkAchievements();
   }
 
   function renderShop(){
@@ -1084,7 +1117,7 @@
     baitList.innerHTML = baits.map(b => itemHtml(b, `Attracts: ${
       b.bias==="peaceful" ? "peaceful fish" :
       b.bias==="carp" ? "carp more often" : "predators"
-    }`, id=>id===equippedBaitId)).join("");
+    }${b.bonus ? ` · +${Math.round(b.bonus*100)}% bite` : ""}`, id=>id===equippedBaitId)).join("");
 
     shopPanel.querySelectorAll("button[data-id]").forEach(btn=>{
       btn.addEventListener("click", () => {
@@ -1130,11 +1163,13 @@
 
   function rarityRoll(){
     let r = Math.random()*100;
-    const nightBoost = isNight ? 1.12 : 1.0;
-    if(r < 0.30*nightBoost) return "legendary";
-    if(r < (0.30*nightBoost) + 1.70*nightBoost) return "epic";
-    if(r < (0.30+1.70)*nightBoost + 8.0*nightBoost) return "rare";
-    if(r < (0.30+1.70+8.0)*nightBoost + 18.0) return "uncommon";
+    const weather = getWeather();
+    r *= weather.rarityMultiplier;
+    
+    if(r < 0.30) return "legendary";
+    if(r < (0.30) + 1.70) return "epic";
+    if(r < (0.30+1.70) + 8.0) return "rare";
+    if(r < (0.30+1.70+8.0) + 18.0) return "uncommon";
     return "common";
   }
 
@@ -1151,6 +1186,7 @@
     const rod = getRod();
     const fl = getFloat();
     const hk = getHook();
+    const weather = getWeather();
 
     const depth = floatDepthM;
 
@@ -1168,11 +1204,20 @@
       // float makes bites slightly better
       w *= (1 + fl.biteBonus);
 
+      // bait bonus if exists
+      if(bait.bonus) w *= (1 + bait.bonus);
+
       // hook size influences species weight a bit
       w *= (0.92 + 0.10*hk.hookSize);
 
       // rod big bonus slightly increases big species presence
       w *= (1 + rod.bigBonus * (f.max / 20));
+      
+      // Weather effects
+      if(weather.id === "rainy" && f.group === "predator") w *= 1.4;
+      if(weather.id === "cloudy" && f.group === "carp") w *= 1.3;
+      if(weather.id === "foggy" && f.rarity === "rare") w *= 1.2;
+      
       return w;
     });
 
@@ -1190,6 +1235,7 @@
     const rarity = rarityRoll();
     const rod = getRod();
     const hk = getHook();
+    const weather = getWeather();
 
     let w = rand(sp.min, sp.max);
 
@@ -1200,11 +1246,19 @@
     const hookMul = 0.95 + 0.12*hk.hookSize;
 
     w = Math.min(sp.max, w * rarMul * bigPush * hookMul);
+    
+    // Weather affects fish size
+    if(weather.id === "stormy") w *= 1.1;
+    
     const trophy = (w >= sp.max * 0.88);
 
     const baseVal = w * sp.priceKg;
     const rarValMul = { common:1.0, uncommon:1.15, rare:1.4, epic:2.0, legendary:3.0 }[rarity] || 1.0;
-    const value = Math.max(1, Math.floor(baseVal * rarValMul));
+    let value = Math.max(1, Math.floor(baseVal * rarValMul));
+    
+    // Weather bonus value
+    if(weather.id === "foggy" && rarity !== "common") value = Math.floor(value * 1.1);
+    if(weather.id === "stormy" && rarity === "legendary") value = Math.floor(value * 1.5);
 
     return { 
       name: sp.name, 
@@ -1254,7 +1308,7 @@
     }
   }
 
-  // ---------- REALISTIC Fight system ----------
+  // ---------- REALISTIC Fight system (NO STAMINA) ----------
   let hookedFish = null;
   let fishInWater = { x: 0, y: 0, rotation: 0 };
 
@@ -1264,7 +1318,6 @@
     depth: 2.0,         // meters
     tension: 0.15,      // 0..1
     fatigue: 0.0,       // 0..1 (fish gets tired)
-    stamina: 1.0,       // 0..1 (player stamina)
     redHold: 0.0,
     badHold: 0.0,
     dir: 1,             // lateral direction
@@ -1289,7 +1342,6 @@
 
     fight.tension = 0.18;
     fight.fatigue = 0;
-    fight.stamina = 1.0;
     fight.redHold = 0;
     fight.badHold = 0;
     fight.dir = Math.random()<0.5 ? -1 : 1;
@@ -1482,24 +1534,15 @@
     fight.fatigue = clamp01(fight.fatigue + fatigueRate * dt);
     const fatigueMul = 1.0 - 0.6 * fight.fatigue;
 
-    // Reel in power (player action)
+    // Reel in power (player action) - NO STAMINA PENALTY
     const reelIn = holdingReel ? (0.9 * reel.reelPower) : 0.0;
-    
-    // Player stamina management
-    if(holdingReel) {
-      fight.stamina = Math.max(0.3, fight.stamina - 0.15 * dt);
-    } else {
-      fight.stamina = Math.min(1.0, fight.stamina + 0.1 * dt);
-    }
-    
-    const effectiveReelIn = reelIn * fight.stamina;
 
     // Fish tries to swim away
     const fishSwimPower = fishPower * fishActivity * fatigueMul;
     const fishSwimAway = fishSwimPower * 0.12;
 
     // Distance calculation
-    const distanceChange = fishSwimAway - effectiveReelIn;
+    const distanceChange = fishSwimAway - reelIn; // No stamina multiplier
     fight.distance = clamp(fight.distance + distanceChange * dt, 0, 60);
 
     // Tension calculation (more realistic)
@@ -1619,9 +1662,15 @@
     const now = performance.now();
     const rod = getRod();
     const fl = getFloat();
+    const bait = getBait();
+    const weather = getWeather();
 
     const baseWait = 1000 + Math.random()*1200;
-    const speedFactor = 1 - (rod.biteBonus + fl.biteBonus + (isNight ? 0.05 : 0));
+    let speedFactor = 1 - (rod.biteBonus + fl.biteBonus + (bait.bonus || 0));
+    
+    // Weather affects bite time
+    speedFactor *= weather.biteMultiplier;
+    
     biteAt = now + baseWait * clamp(speedFactor, 0.75, 1.10);
     missAt = biteAt + 1500;
   }
@@ -1696,7 +1745,7 @@
   logBtn.addEventListener("click", () => { logPanel.style.display="flex"; renderLogbook(); });
   logClose.addEventListener("click", () => { logPanel.style.display="none"; });
   resetLogBtn.addEventListener("click", () => {
-    logbook = { totalCaught: 0, totalKgCaught: 0, species: {} };
+    logbook = { totalCaught: 0, totalKgCaught: 0, species: {}, achievements: [] };
     saveAll();
     renderLogbook();
   });
@@ -1720,17 +1769,6 @@
 
   setupBtn.addEventListener("click", () => { setupPanel.style.display="flex"; updateSetupPanel(true); });
   setupClose.addEventListener("click", () => { setupPanel.style.display="none"; });
-
-  // Day/Night
-  function updateDayBtn(){
-    dayBtn.textContent = isNight ? "☀️ Day" : "🌙 Night";
-  }
-  dayBtn.addEventListener("click", () => {
-    isNight = !isNight;
-    saveAll();
-    updateDayBtn();
-    log(isNight ? "🌙 Night time. Predators get more active." : "☀️ Day time. Common fish are more consistent.");
-  });
 
   // Setup UI
   function updateSetupPanel(fillSelects=false){
@@ -1824,9 +1862,9 @@
 
     // Background
     ctx.fillStyle = "rgba(10, 20, 40, 0.8)";
-    ctx.fillRect(10, 8, W-20, 74);
+    ctx.fillRect(10, 8, W-20, 60);
     ctx.strokeStyle = "#2a3a55";
-    ctx.strokeRect(10, 8, W-20, 74);
+    ctx.strokeRect(10, 8, W-20, 60);
 
     // Tension bar
     const x = 18, y = 18, w = W-36, h = 12;
@@ -1845,28 +1883,16 @@
     ctx.fillStyle = col;
     ctx.fillRect(x, y, fillW, h);
 
-    // Stamina bar
-    const staminaY = y + h + 10;
-    ctx.fillStyle = "#16263c";
-    ctx.fillRect(x, staminaY, w, 8);
-    ctx.strokeStyle = "#2a3a55";
-    ctx.strokeRect(x, staminaY, w, 8);
-
-    const staminaW = fight.stamina * w;
-    ctx.fillStyle = "#3498db";
-    ctx.fillRect(x, staminaY, staminaW, 8);
-
     // Text
     ctx.fillStyle = "#eaf2ff";
     ctx.font = "11px monospace";
     ctx.fillText(`Tension (rod ${rod.rodMaxKg}kg / line ${line.strengthKg}kg)`, x, y-4);
-    ctx.fillText(`Stamina`, x, staminaY-4);
-    ctx.fillText(`Distance: ${fight.distance.toFixed(1)}m`, x, staminaY+25);
-    ctx.fillText(`Fish fatigue: ${Math.round(fight.fatigue*100)}%`, x+150, staminaY+25);
-    ctx.fillText(`DRAG: ${fight.drag.toFixed(2)}`, x, staminaY+40);
+    ctx.fillText(`Distance: ${fight.distance.toFixed(1)}m`, x, y+25);
+    ctx.fillText(`Fish fatigue: ${Math.round(fight.fatigue*100)}%`, x+150, y+25);
+    ctx.fillText(`DRAG: ${fight.drag.toFixed(2)}`, x, y+40);
     
     if(hookedFish) {
-      ctx.fillText(`${hookedFish.fightStyle.toUpperCase()} fight`, x+150, staminaY+40);
+      ctx.fillText(`${hookedFish.fightStyle.toUpperCase()} fight`, x+150, y+40);
     }
   }
 
@@ -1891,45 +1917,94 @@
     }
   }
 
+  function drawWeatherEffects(t){
+    const weather = getWeather();
+    
+    switch(weather.id){
+      case "rainy":
+        // Rain drops
+        ctx.fillStyle = "rgba(148, 210, 189, 0.5)";
+        for(let i = 0; i < 20; i++){
+          const rx = (t/100 + i * 50) % W;
+          const ry = (t/50 + i * 30) % H;
+          ctx.fillRect(rx, ry, 1, 3);
+        }
+        break;
+      case "foggy":
+        // Fog overlay
+        ctx.fillStyle = "rgba(200, 220, 240, 0.2)";
+        ctx.fillRect(0, 0, W, H);
+        break;
+      case "stormy":
+        // Lightning flashes
+        if(Math.sin(t/500) > 0.95){
+          ctx.fillStyle = "rgba(255, 255, 200, 0.3)";
+          ctx.fillRect(0, 0, W, H);
+        }
+        // Heavy rain
+        ctx.fillStyle = "rgba(100, 180, 220, 0.6)";
+        for(let i = 0; i < 30; i++){
+          const rx = (t/80 + i * 40) % W;
+          const ry = (t/40 + i * 25) % H;
+          ctx.fillRect(rx, ry, 1, 4);
+        }
+        break;
+    }
+  }
+
   function drawScene(t){
     // Clear canvas
     ctx.clearRect(0, 0, W, H);
 
-    // Sky
-    drawPixelRect(0, 0, W, H, isNight ? "#061022" : "#08101a");
+    // Sky based on weather
+    const weather = getWeather();
+    let skyColor, waterColor;
     
-    // Distant background
-    drawPixelRect(0, 34, W, 60, isNight ? "#07152c" : "#0d1b2a");
-
-    // Stars at night
-    if(isNight){
-      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
-      for(let i = 0; i < 30; i++){
-        const sx = (i * 97 + 23) % W;
-        const sy = (i * 43 + 17) % 70;
-        ctx.fillRect(sx, sy, 1, 1);
-        if(i % 3 === 0) ctx.fillRect(sx+1, sy, 1, 1);
-      }
+    switch(weather.id){
+      case "sunny":
+        skyColor = "#08101a"; waterColor = "#0a9396";
+        break;
+      case "rainy":
+        skyColor = "#2a3a55"; waterColor = "#0a5560";
+        break;
+      case "foggy":
+        skyColor = "#3a4a65"; waterColor = "#1a6a70";
+        break;
+      case "stormy":
+        skyColor = "#1a2a45"; waterColor = "#084a50";
+        break;
+      case "cloudy":
+        skyColor = "#384a65"; waterColor = "#1a7a80";
+        break;
+      default:
+        skyColor = "#08101a"; waterColor = "#0a9396";
     }
 
+    // Sky
+    drawPixelRect(0, 0, W, H, skyColor);
+    
+    // Distant background
+    const bgColor = weather.id === "stormy" ? "#1a2a45" : "#0d1b2a";
+    drawPixelRect(0, 34, W, 60, bgColor);
+
     // Shore
-    drawPixelRect(0, shoreY-18, W, 18, isNight ? "#24211d" : "#2d2a24");
-    drawPixelRect(0, shoreY-10, W, 10, isNight ? "#2f2a24" : "#3a342d");
+    const shoreColor = weather.id === "rainy" ? "#3a342d" : "#2d2a24";
+    drawPixelRect(0, shoreY-18, W, 18, shoreColor);
+    drawPixelRect(0, shoreY-10, W, 10, "#3a342d");
 
     // Water
     const waterGradient = ctx.createLinearGradient(0, waterY, 0, H);
-    if(isNight){
-      waterGradient.addColorStop(0, "#0a5560");
-      waterGradient.addColorStop(1, "#033840");
-    } else {
-      waterGradient.addColorStop(0, "#0a9396");
-      waterGradient.addColorStop(1, "#06747a");
-    }
+    waterGradient.addColorStop(0, waterColor);
+    waterGradient.addColorStop(1, weather.id === "stormy" ? "#033840" : "#06747a");
     ctx.fillStyle = waterGradient;
     ctx.fillRect(0, waterY, W, H-waterY);
 
+    // Weather effects
+    drawWeatherEffects(t);
+
     // Water waves
-    ctx.fillStyle = isNight ? "rgba(148, 210, 189, 0.25)" : "rgba(148, 210, 189, 0.35)";
+    const waveAlpha = weather.id === "stormy" ? 0.4 : (weather.id === "rainy" ? 0.3 : 0.35);
+    ctx.fillStyle = `rgba(148, 210, 189, ${waveAlpha})`;
     for(let i = 0; i < 8; i++){
       const waveY = waterY + 15 + i * 16 + Math.sin(t/800 + i * 0.5) * 3;
       const waveWidth = W + Math.sin(t/600 + i) * 20;
@@ -2051,7 +2126,7 @@
       
       ctx.fillStyle = holdingReel ? "#4dff88" : "#eaf2ff";
       ctx.font = "11px monospace";
-      ctx.fillText(holdingReel ? "REELING - Release to regain stamina" : "Hold REEL to pull fish in", 18, H-12);
+      ctx.fillText(holdingReel ? "REELING - Hold to pull fish in" : "Hold REEL to pull fish in", 18, H-12);
     }
   }
 
@@ -2131,8 +2206,8 @@
 
     floatDepthM = typeof s.floatDepthM === "number" ? s.floatDepthM : floatDepthM;
     defaultDrag = typeof s.defaultDrag === "number" ? s.defaultDrag : defaultDrag;
-    logbook = s.logbook || logbook;
-    isNight = !!s.isNight;
+    logbook = s.logbook || { totalCaught: 0, totalKgCaught: 0, species: {}, achievements: [] };
+    currentWeather = s.currentWeather || "sunny";
   }
 
   function saveAll(){
@@ -2149,13 +2224,13 @@
       floatDepthM,
       defaultDrag,
       logbook,
-      isNight
+      currentWeather
     });
   }
 
   // ---------- Init ----------
   loadAll();
-  updateDayBtn();
+  updateWeatherDisplay();
 
   // default slider values
   depthSlider.value = String(floatDepthM);
@@ -2168,7 +2243,7 @@
 
   setState("ready");
   updateHud();
-  log("🎣 Tap anywhere on water to cast there. During fight: hold Reel + manage DRAG. Press ✂️ to cut line.");
+  log(`🎣 Tap anywhere on water to cast there. Weather: ${getWeather().name}. During fight: hold Reel + manage DRAG. Press ✂️ to cut line.`);
 
   window.addEventListener("beforeunload", saveAll);
   setInterval(saveAll, 4000);
